@@ -1,0 +1,16 @@
+frontend/node_modules/
+frontend/.npm-cache/
+frontend/dist/
+backend/target/
+.local/
+.env
+.env.*
+!.env.example
+*.local.yaml
+*.local.yml
+*.log
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

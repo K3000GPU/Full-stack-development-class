@@ -1,0 +1,7 @@
+-- 只在 application.yaml 指定的教学库内创建表；保留已有数据。
+CREATE TABLE IF NOT EXISTS messages (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    nickname VARCHAR(30) NOT NULL,
+    content VARCHAR(200) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
