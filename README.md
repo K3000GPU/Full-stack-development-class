@@ -8,7 +8,7 @@
 
 | 工具 | 本次使用版本 | 用途 |
 | --- | --- | --- |
-| Windows | Windows 11，build 26200；PowerShell | 执行以下启动命令 |
+| Windows | Windows 11，build 26200；PowerShell 7.6.5 | 执行以下启动命令 |
 | Git | 2.51.2.windows.1 | clone 工程 |
 | Node.js / npm | 24.21.0 / 11.19.0 | 安装、运行和构建前端 |
 | JDK | Microsoft OpenJDK 21.0.8+9 LTS | 编译、运行后端 |
@@ -203,7 +203,11 @@ Set-Location ..\backend
 | 经过代理的自动接口检查 | 3 条有效留言返回 `201`，14 次无效请求被拒绝，GET 能回读 |
 | MySQL 客户端独立 SELECT 与权限检查 | 通过，应用账号仅有教学库的 SELECT、INSERT、CREATE；emoji 昵称 30 字符、内容 200 字符真实入库 |
 | 浏览器操作 | 空昵称校验、点击发布、成功后清空内容、重新 GET 列表和刷新后读取均通过；HTML 作为普通文字显示 |
+| 干净 Git clone | 从本地仓库克隆源码，重新安装前端、首次下载 Wrapper、编译测试并按 README 启动两端，均通过 |
+| 后端重启与重复建表 | 从 clone 目录启动后，GET 与重启前的 4 条完整记录快照一致；随后新发布的记录同样真实入库 |
 
-单元/MVC 测试使用 mock 隔离 Repository，只验证规则和协议；上表 MySQL 结果来自真实 MySQL 客户端查询，使用的是 `127.0.0.1:3307/campus_message_board`，不是 mock 或其他数据库。验收留言保留在本机数据库中，不随 Git 发放。
+单元/MVC 测试使用 mock 隔离 Repository，只验证规则和协议；上表 MySQL 结果来自真实 MySQL 客户端查询，使用的是 `127.0.0.1:3307/campus_message_board`，不是 mock 或其他数据库。本次最终保留 8 条验收留言，不随 Git 发放。原工作区的课件和教学方案未修改。
+
+本机已准备的演示环境可按被 Git 排除的 `.local/RUN-LOCAL.md` 启动；学生 clone 后使用本文的通用步骤。验收范围为上述 Windows 环境，未实测 macOS/Linux。
 
 远程 Git 仓库尚未发布：教师可将此目录推送到自己的仓库，发放实际 URL。本工程没有部署平台配置。

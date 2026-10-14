@@ -22,26 +22,26 @@
 
 ## 2. 按一次发布的顺序找文件与方法
 
-下表中的链接均指向本工程真实源码。方法名称可在编辑器中直接搜索。
+下表中的链接均指向本工程真实源码；行号从 1 开始。方法名称可在编辑器中直接搜索，代码修改后应重新核对行号。
 
 | 顺序 | 文件与定位方法 | 发生的事情 | 调用类型 |
 | --- | --- | --- | --- |
-| 1 | [MessageForm.vue](../frontend/src/components/MessageForm.vue)：`handleSubmit()` | 表单 `@submit.prevent` 触发方法，检查昵称与内容，`emit('submit', payload)` 交给父页面 | Vue 组件事件，浏览器内部 |
-| 2 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue)：`publishMessage(payload)` | 接收 `@submit`，设置提交状态，调用 `createMessage(payload)` | JavaScript 内部方法调用 |
-| 3 | [messages.js](../frontend/src/api/messages.js)：`createMessage(payload)` | 指定 `/api/messages`、`POST` 和 JSON 请求体，调用 `request()` | JavaScript 内部方法调用 |
-| 4 | [http.js](../frontend/src/api/http.js)：`request(path, options)` | 调用 `fetch()`，设置 JSON 请求头；等待并解析响应 | **HTTP POST**，浏览器 → Vite `5173` |
-| 5 | [vite.config.js](../frontend/vite.config.js)：`server.proxy['/api']` | 将请求转发到 Spring Boot `8080`，路径仍为 `/api/messages` | **HTTP 转发**，Vite → Spring Boot |
-| 6 | [MessageController.java](../backend/src/main/java/com/example/campus/controller/MessageController.java)：`createMessage(request)` | `@PostMapping` 接收请求；JSON 被框架转换成 `CreateMessageRequest`，然后调用 Service | HTTP 入口，之后是 Java 内部方法调用 |
-| 7 | [MessageService.java](../backend/src/main/java/com/example/campus/service/MessageService.java)：`createMessage(nickname, content)`、`characterCount(value)` | 昵称 `strip()`，检查空值、纯空白和字符数，再调用 `repository.insert()` | Java 内部方法调用 |
-| 8 | [MessageRepository.java](../backend/src/main/java/com/example/campus/repository/MessageRepository.java)：`insert(nickname, content)` | `jdbcTemplate.update()` 执行带两个 `?` 参数的 INSERT，取得生成的主键 | **JDBC / MySQL 通信**，不是 HTTP |
-| 9 | 同一文件 `insert()` 中的 `queryForObject()` 与 `ROW_MAPPER` | 使用 `WHERE id = ?` 回读新记录，把数据库行转换为 `Message`，包括真实 `created_at` | JDBC 查询，然后返回 Java 对象 |
-| 10 | [MessageResponse.java](../backend/src/main/java/com/example/campus/dto/MessageResponse.java)：`from(message)`；`MessageController.createMessage()` | Repository → Service → Controller 原路返回；转换为响应 DTO，框架序列化为 JSON，状态为 `201` | Java 内部返回，随后 **HTTP 响应** |
-| 11 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue)：`publishMessage()`；[MessageForm.vue](../frontend/src/components/MessageForm.vue)：`clearContent()` | POST 成功后清空内容、保留昵称，将新记录显示在列表，随后调用 `loadMessages()` | JavaScript 内部方法调用 |
-| 12 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue)：`loadMessages()` → [messages.js](../frontend/src/api/messages.js)：`listMessages()` → [http.js](../frontend/src/api/http.js)：`request()` | 重新请求数据库中的完整留言列表，同样经过 Vite 代理 | **新的 HTTP GET** `/api/messages` |
-| 13 | [MessageController.java](../backend/src/main/java/com/example/campus/controller/MessageController.java)：`listMessages()` → [MessageService.java](../backend/src/main/java/com/example/campus/service/MessageService.java)：`listMessages()` → [MessageRepository.java](../backend/src/main/java/com/example/campus/repository/MessageRepository.java)：`findAll()` | SELECT 查询全部留言，按 `created_at DESC, id DESC` 排序；返回响应 DTO 数组 | Java 内部调用 + JDBC，随后 HTTP `200` |
-| 14 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue)：`loadMessages()` → [MessageList.vue](../frontend/src/components/MessageList.vue)：`messages` prop 与 `v-for` | 用 GET 返回结果更新页面状态，列表组件重新展示 | Vue 响应式更新，浏览器内部 |
+| 1 | [MessageForm.vue](../frontend/src/components/MessageForm.vue)：第 16 行 `handleSubmit()` | 表单 `@submit.prevent` 触发方法，检查昵称与内容，`emit('submit', payload)` 交给父页面 | Vue 组件事件，浏览器内部 |
+| 2 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue)：第 24 行 `publishMessage(payload)` | 接收 `@submit`，设置提交状态，调用 `createMessage(payload)` | JavaScript 内部方法调用 |
+| 3 | [messages.js](../frontend/src/api/messages.js)：第 8 行 `createMessage(message)` | 指定 `/api/messages`、`POST` 和 JSON 请求体，调用 `request()` | JavaScript 内部方法调用 |
+| 4 | [http.js](../frontend/src/api/http.js)：第 2 行 `request(path, options)` | 第 6 行调用 `fetch()`，设置 JSON 请求头；等待并解析响应 | **HTTP POST**，浏览器 → Vite `5173` |
+| 5 | [vite.config.js](../frontend/vite.config.js)：第 10 行 `server.proxy` | 将请求转发到 Spring Boot `8080`，路径仍为 `/api/messages` | **HTTP 转发**，Vite → Spring Boot |
+| 6 | [MessageController.java](../backend/src/main/java/com/example/campus/controller/MessageController.java)：第 33 行 `createMessage(request)` | `@PostMapping` 接收请求；JSON 被框架转换成 `CreateMessageRequest`，然后调用 Service | HTTP 入口，之后是 Java 内部方法调用 |
+| 7 | [MessageService.java](../backend/src/main/java/com/example/campus/service/MessageService.java)：第 30 行 `createMessage(nickname, content)` | 第 53 行 `trimWhitespace()` 去除昵称首尾空白；第 48 行 `characterCount()` 按 code point 计数；检查规则，再调用 `repository.insert()` | Java 内部方法调用 |
+| 8 | [MessageRepository.java](../backend/src/main/java/com/example/campus/repository/MessageRepository.java)：第 37 行 `insert(nickname, content)` | 第 39 行 `jdbcTemplate.update()` 执行带两个 `?` 参数的 INSERT，取得生成的主键 | **JDBC / MySQL 通信**，不是 HTTP |
+| 9 | 同一文件第 54 行 `queryForObject()` 与第 17 行 `ROW_MAPPER` | 使用 `WHERE id = ?` 回读新记录，把数据库行转换为 `Message`，包括真实 `created_at` | JDBC 查询，然后返回 Java 对象 |
+| 10 | [MessageResponse.java](../backend/src/main/java/com/example/campus/dto/MessageResponse.java)：第 9 行 `from(message)`；`MessageController.createMessage()` | Repository → Service → Controller 原路返回；转换为响应 DTO，框架序列化为 JSON，状态为 `201` | Java 内部返回，随后 **HTTP 响应** |
+| 11 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue)：第 40 行；[MessageForm.vue](../frontend/src/components/MessageForm.vue)：第 33 行 `clearContent()` | POST 成功后清空内容、保留昵称，将新记录显示在列表，随后调用 `loadMessages()` | JavaScript 内部方法调用 |
+| 12 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue)：第 15 行 `loadMessages()` → [messages.js](../frontend/src/api/messages.js)：第 4 行 `listMessages()` → [http.js](../frontend/src/api/http.js)：第 2 行 `request()` | 重新请求数据库中的完整留言列表，同样经过 Vite 代理 | **新的 HTTP GET** `/api/messages` |
+| 13 | [MessageController.java](../backend/src/main/java/com/example/campus/controller/MessageController.java)：第 27 行 `listMessages()` → [MessageService.java](../backend/src/main/java/com/example/campus/service/MessageService.java)：第 24 行 `listMessages()` → [MessageRepository.java](../backend/src/main/java/com/example/campus/repository/MessageRepository.java)：第 29 行 `findAll()` | SELECT 查询全部留言，按 `created_at DESC, id DESC` 排序；返回响应 DTO 数组 | Java 内部调用 + JDBC，随后 HTTP `200` |
+| 14 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue)：第 18 行 → [MessageList.vue](../frontend/src/components/MessageList.vue)：第 32 行 `v-for` | 用 GET 返回结果更新页面状态，列表组件重新展示 | Vue 响应式更新，浏览器内部 |
 
-首次进入页面时，`MessageBoard.vue` 的 `onMounted()` 直接调用 `loadMessages()`，走表中第 12～14 步。POST 保存一条记录后的回读 SELECT 属于该 POST 的内部过程；页面刷新列表则是另一次独立的 GET 请求。
+首次进入页面时，`MessageBoard.vue` 第 53 行的 `onMounted()` 直接调用 `loadMessages()`，走表中第 12～14 步。POST 保存一条记录后的回读 SELECT 属于该 POST 的内部过程；页面刷新列表则是另一次独立的 GET 请求。
 
 ### 出错时走哪里
 
