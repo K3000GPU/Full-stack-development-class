@@ -1,100 +1,132 @@
 # 校园留言板
 
-大学新生第二节基础培训用的最小全栈工程：输入昵称和内容，发布留言，查看真实 MySQL 中保存的留言。课堂重点是认识目录分层，以及一次操作如何从 Vue 页面经过 HTTP、Spring Boot 和 JDBC 到达数据库。
+使用 Vue 3、Go/Gin 和 MySQL 的留言板，支持查看和发布留言。前端采用人物背景、黑白面板与斜切导航，数据保存在真实 MySQL 中。
 
-只提供查看和发布功能，不包含登录。课堂导读见 [docs/TEACHING.md](docs/TEACHING.md)。
+## 功能
 
-前端界面采用 `ui-portrait-music` 的人物留白风格：黑白面板、斜切导航和 GSAP 入场动效。素材来源、改造文件与验证范围见 [docs/UI_REUSE.md](docs/UI_REUSE.md)。
+- 发布昵称和留言内容，成功后重新读取列表。
+- 查看按 ID 倒序排列的留言及发布时间。
+- 昵称去除首尾空白后为 1～30 个字符；内容不能为纯空白，原文最多 200 个字符。
+- 中英文和 emoji 按 Unicode code point 计数；内容保留原始空白和换行。
+- 提供加载状态、错误提示和重新加载，失败时保留表单输入。
 
-## 1. 运行环境
+## 环境与技术栈
 
-| 工具 | 本次使用版本 | 用途 |
-| --- | --- | --- |
-| Windows | Windows 11，build 26200；PowerShell 7.6.5 | 执行以下启动命令 |
-| Git | 2.51.2.windows.1 | clone 工程 |
-| Node.js / npm | 24.21.0 / 11.19.0 | 安装、运行和构建前端 |
-| JDK | Microsoft OpenJDK 21.0.8+9 LTS | 编译、运行后端 |
-| Maven | 3.9.11，由 Wrapper 下载 | 不需要另行安装 Maven |
-| MySQL | Community Server 8.4.9 | 保存留言 |
-| Vue / Vite | 3.5.44 / 8.3.4 | 页面与前端开发服务 |
-| GSAP | 3.15.0 | 组件内的入场动效 |
-| Spring Boot | 3.5.16 | 后端 Web 与数据库支持 |
+| 项目 | 验证版本 |
+| --- | --- |
+| 操作系统 | Windows 11，PowerShell 7.6.5 |
+| Node.js / npm | 24.21.0 / 11.19.0 |
+| Go | 1.27.1 |
+| Gin | 1.12.0 |
+| MySQL 驱动 | go-sql-driver/mysql 1.10.1 |
+| MySQL | Community Server 8.4.9 |
+| Vue / Vite / GSAP | 3.5.44 / 8.3.4 / 3.15.0 |
 
-前端依赖版本由 `frontend/package-lock.json` 固定。后端依赖由 `backend/pom.xml` 固定；Maven Wrapper 3.3.4 使用官方 `only-script` 分发方式，`mvnw`、`mvnw.cmd` 和 `.mvn/wrapper/maven-wrapper.properties` 均随项目提供，首次运行会下载 Maven，无需 `maven-wrapper.jar`。
+前端使用 `package-lock.json` 固定依赖解析结果。后端由 `go.mod` 声明模块版本，`go.sum` 校验下载的模块内容；`go.sum` 不是与 npm lockfile 等价的锁文件。首次安装依赖需要联网。
 
-首次运行需要访问 npm 和 Maven 仓库。教师应在课前安装环境并完成依赖下载。JDK 必须包含 `javac`；`JAVA_HOME` 应指向 JDK 根目录，而不是 `bin`。
+## 项目结构
 
-## 2. clone 并检查环境
-
-在 PowerShell 中，将仓库地址替换为教师实际发放的 Git URL：
-
-```powershell
-$repoUrl = Read-Host '粘贴教师提供的真实 Git URL'
-git clone $repoUrl campus-message-board
-Set-Location .\campus-message-board
-git --version
-node --version
-npm.cmd --version
-java -version
-javac -version
+```text
+campus-message-board/
+├── frontend/
+│   ├── src/views/MessageBoard.vue       页面状态与发布后刷新
+│   ├── src/components/MessageForm.vue   输入与提交事件
+│   ├── src/components/MessageList.vue   留言与加载、错误状态
+│   ├── src/components/portrait/         人物布局与 GSAP 动效
+│   ├── src/api/messages.js              listMessages、createMessage
+│   ├── src/api/http.js                  HTTP 请求与错误处理
+│   └── vite.config.js                  5173 端口与 /api 代理
+├── backend/
+│   ├── main.go                         配置、连接模块、注册路由
+│   ├── go.mod / go.sum                  Go 模块与校验信息
+│   ├── schema.sql                      创建缺失的 messages 表
+│   └── internal/
+│       ├── config/config.go            环境变量与数据库连接参数
+│       ├── handler/message_handler.go  HTTP 解析与响应
+│       ├── service/message_service.go  输入规则与业务过程
+│       ├── repository/message_repository.go  参数化 SQL
+│       └── model/message.go            记录、请求与响应结构
+├── docs/                               调用链、UI 来源与验证说明
+└── legacy/spring-boot/                  原后端归档，不参与默认运行
 ```
 
-PowerShell 中使用 `npm.cmd` 可避免 `npm.ps1` 被脚本执行策略拦截。后面的三个终端都以克隆后的 `campus-message-board` 为起点。
+默认请求链：浏览器 → Vite `/api` 代理 → Gin Handler → Service → Repository → MySQL。
 
-## 3. 教师课前准备 MySQL
+## 本地运行
 
-**只连接教师明确指定的教学 MySQL 实例和 `campus_message_board` 数据库。不要对不明实例、其他数据库或已有数据执行初始化。** 本工程不会执行 `DROP`、`TRUNCATE` 或清空数据。
+以下命令使用 Windows PowerShell。`npm.cmd` 可避免 `npm.ps1` 受到脚本执行策略限制。
 
-教师先确认 MySQL 的主机、端口和管理账号。下面示例连接本机 `3306`；本次项目验收使用新建的独立本机实例、端口 `3307`，不是机器上未知的 MySQL 服务。学生按教师提供的端口配置。
+### 1. 获取代码
 
-在确认过的教学实例上，使用 MySQL 客户端登录。`-p` 会提示输入管理密码，不要把密码写进命令或 Git：
+```powershell
+$repoUrl = Read-Host '请输入项目 Git URL'
+git clone $repoUrl campus-message-board
+Set-Location .\campus-message-board
+node --version
+npm.cmd --version
+go version
+```
+
+### 2. 初始化数据库
+
+先确认要使用的 MySQL 实例、端口和账号。只在明确指定的项目实例上创建 `campus_message_board`，不要在未知实例或其他数据库中执行初始化。
 
 ```powershell
 mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -p
 ```
 
-如果 `mysql` 不在 PATH，使用安装目录下 `mysql.exe` 的完整路径。仅在上述已确认的实例中执行以下 SQL，并将示例密码替换为本机教学专用密码：
+在 MySQL 客户端中执行，将密码占位符替换为本机专用密码：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS campus_message_board
   CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
-CREATE USER IF NOT EXISTS 'campus_student'@'127.0.0.1'
-  IDENTIFIED BY '请替换为本机教学专用密码';
+CREATE USER IF NOT EXISTS 'campus_app'@'127.0.0.1'
+  IDENTIFIED BY '请替换为本机项目密码';
 
 GRANT SELECT, INSERT, CREATE ON campus_message_board.*
-  TO 'campus_student'@'127.0.0.1';
+  TO 'campus_app'@'127.0.0.1';
 ```
 
-这是本机 TCP 连接账号示例；如果教师已经准备了专用账号，直接使用所提供的配置，无需重复创建。`IF NOT EXISTS` 不会重设已有账号的密码。远程课堂数据库的账号来源地址由教师设置，不要自行扩大授权范围。
+已有项目数据库和专用账号时直接使用现有配置；`IF NOT EXISTS` 不会更改已有账号密码。示例账号用于本机 TCP 连接，远程 MySQL 需要按实际来源地址授权。
 
-数据库本身由教师预先创建；`backend/src/main/resources/schema.sql` 只在已配置的数据库中执行 `CREATE TABLE IF NOT EXISTS messages`。后端启动时自动初始化表，重复启动保留原有留言，不需要手工再导入表结构。
+数据库由上述步骤预先创建。后端启动会检查连接，并执行嵌入程序的 `backend/schema.sql`；它只包含 `CREATE TABLE IF NOT EXISTS`，不会清空、重建已有表或创建其他数据库。
 
-## 4. 启动后端（终端 A）
+### 3. 启动后端
+
+从项目根目录打开 PowerShell：
 
 ```powershell
 Set-Location .\backend
-
-# 默认主机与端口；教师使用其他端口时在这里修改。
+$env:PORT = '8080'
 $env:DB_HOST = '127.0.0.1'
 $env:DB_PORT = '3306'
 $env:DB_NAME = 'campus_message_board'
-$env:DB_USERNAME = 'campus_student'
-$dbSecret = Read-Host '请输入教师提供的教学账号密码' -AsSecureString
+$env:DB_USERNAME = Read-Host '请输入项目数据库用户名'
+$dbSecret = Read-Host '请输入项目数据库密码' -AsSecureString
 $env:DB_PASSWORD = [System.Net.NetworkCredential]::new('', $dbSecret).Password
 Remove-Variable dbSecret
 
-.\mvnw.cmd --version
-.\mvnw.cmd spring-boot:run
+go mod download
+go run .
 ```
 
-看到后端启动成功后，服务地址为 `http://localhost:8080`。保持终端 A 运行。`DB_NAME`、`DB_USERNAME` 和 `DB_PASSWORD` 必须提供；应用不内置真实账号或密码，也不会自动读取 `.env`。这些变量仅对当前 PowerShell 和它启动的进程生效，关闭终端后重新启动需要再次设置。
+后端默认监听 `http://127.0.0.1:8080`。保持此终端运行。
 
-数据库连接配置在 `backend/src/main/resources/application.yaml`。默认 `DB_HOST=127.0.0.1`、`DB_PORT=3306`；本次隔离验收时设置 `DB_PORT=3307`。不要把数据库管理账号当作应用账号。
+| 环境变量 | 默认值 / 要求 |
+| --- | --- |
+| `PORT` | `8080` |
+| `DB_HOST` | `127.0.0.1` |
+| `DB_PORT` | `3306` |
+| `DB_NAME` | 必填，项目数据库名 |
+| `DB_USERNAME` | 必填，项目专用账号 |
+| `DB_PASSWORD` | 必填，账号密码 |
 
-## 5. 启动前端（终端 B）
+配置由当前进程的环境变量读取，不自动加载 `.env`。环境变量只对当前终端及其子进程有效；本机 MySQL 使用 `3307` 等其他端口时修改 `DB_PORT`。
 
-从项目根目录打开第二个 PowerShell：
+### 4. 启动前端
+
+从项目根目录打开另一个 PowerShell：
 
 ```powershell
 Set-Location .\frontend
@@ -102,49 +134,64 @@ npm.cmd ci
 npm.cmd run dev
 ```
 
-浏览器打开 [http://localhost:5173](http://localhost:5173)。Vite 固定使用 `5173`，`/api` 代理到 `http://127.0.0.1:8080`，**不改写 `/api` 路径**。浏览器请求 `/api/messages`，后端收到的也是 `/api/messages`。代理配置见 `frontend/vite.config.js`。
+打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)。Vite 固定监听 `5173`，将 `/api` 代理到 `http://127.0.0.1:8080`，不改写路径。修改后端端口时也需同步修改 `frontend/vite.config.js` 的代理目标。
 
-前端和后端都需要持续运行；MySQL 也必须处于运行状态。结束演示时在前后端终端分别按 `Ctrl+C`。停止服务不会删除数据库记录。
+前后端和 MySQL 都需要保持运行。在前后端终端按 `Ctrl+C` 结束程序，停止服务不会删除数据库中的记录。
 
-## 6. 接口与规则
+## API
 
-| 方法与路径 | 请求 | 成功响应 |
+| 方法 | 路径 | 成功响应 |
 | --- | --- | --- |
-| `GET /api/messages` | 无请求体 | `200`，留言数组；无记录时为 `[]` |
-| `POST /api/messages` | JSON：`nickname`、`content` | `201`，新建的留言对象 |
+| GET | `/api/messages` | `200`，留言数组；没有记录时为 `[]` |
+| POST | `/api/messages` | `201`，新建记录 |
 
-发布示例：
+POST 请求使用 `Content-Type: application/json`：
 
 ```json
-{"nickname":"  小林  ","content":"第一次完成前端到数据库的完整请求！"}
+{"nickname":"  小林  ","content":"周五有人一起去图书馆吗？"}
 ```
 
-返回记录的形状如下，实际 ID 和时间由数据库生成：
+响应示例：
 
 ```json
 {
   "id": 1,
   "nickname": "小林",
-  "content": "第一次完成前端到数据库的完整请求！",
-  "createdAt": "2026-10-13T14:30:00"
+  "content": "周五有人一起去图书馆吗？",
+  "createdAt": "2026-10-21T19:30:00"
 }
 ```
 
-昵称去除首尾空白后必须为 1～30 个字符；内容不能为 `null`、空字符串或纯空白，原文最多 200 个字符。内容保留原文，包括换行。长度按 Unicode code point 计算，一个普通 emoji 计为一个字符。前端先提示用户，后端 Service 再检查；绕过前端也不能跳过规则。
+`id` 和 `createdAt` 来自数据库。表字段为 `id`、`nickname`、`content`、`created_at`；JSON 使用 `createdAt`。
 
-无效输入返回 `400` 和 `{"message":"具体错误说明"}`；昵称和内容必须为 JSON 字符串，数字、布尔值不会自动转成文字。非 JSON 请求返回 `415`，数据库连接不可用返回 `503`，其他服务错误返回 `500`。接口不向浏览器暴露数据库密码、SQL 或 Java 异常堆栈。
+错误响应统一为 `{"message":"错误说明"}`。输入或 JSON 无效返回 `400`，非 JSON 请求返回 `415`，数据库连接不可用返回 `503`，其他服务错误返回 `500`。响应不包含数据库凭据、SQL 或异常堆栈。
 
-表结构：`messages(id, nickname, content, created_at)`；数据库下划线字段 `created_at` 转为 JSON 的 `createdAt`。
+## 构建与检查
 
-## 7. 自己验收
+```powershell
+# 后端：从项目根目录开始。
+Set-Location .\backend
+go mod verify
+go test ./...
+go build -o bin/campus-message-board.exe .
 
-### 页面与完整链路
+# 前端。
+Set-Location ..\frontend
+npm.cmd ci
+npm.cmd run build
+```
 
-1. 打开浏览器开发者工具的 Network 面板，访问 `http://localhost:5173`，确认 `GET /api/messages` 成功。
-2. 输入昵称 `  新生  ` 和一条独特内容，点击发布。确认 `POST /api/messages` 返回 `201`，记录中昵称为 `新生`。
-3. 确认随后出现新的 `GET /api/messages`，页面显示刚发布的留言。
-4. 刷新浏览器、重启后端后再次查询，确认记录仍存在。
-5. 用教学账号连接同一实例，执行下方只读 SQL，核对 ID、昵称和内容；这一步用于确认真正写入的是 MySQL。
+Go 单元测试不连接数据库。可执行文件位于 `backend/bin`，前端构建产物位于 `frontend/dist`；运行后端二进制时同样需要配置数据库环境变量。
+
+前后端已经启动时，从项目根目录执行真实接口检查：
+
+```powershell
+node .\scripts\verify-api.mjs
+```
+
+脚本默认请求 `http://127.0.0.1:5173`，覆盖开发代理；每次新增并保留 3 条检查记录，验证有效发布、Unicode 边界和无效输入，不删除已有数据。运行前确认服务连接的是预期项目数据库。设置 `$env:API_BASE = 'http://127.0.0.1:8080'` 可以直连后端。
+
+也可在同一数据库中独立核对结果：
 
 ```sql
 SELECT DATABASE(), VERSION();
@@ -154,65 +201,21 @@ ORDER BY id DESC
 LIMIT 10;
 ```
 
-### 自动接口检查与编译
+## 常见问题
 
-前后端都在运行时，从项目根目录执行接口检查：
-
-```powershell
-node .\scripts\verify-api.mjs
-```
-
-脚本默认访问 `http://127.0.0.1:5173`，覆盖 Vite 代理；将验证正常发布、读取和输入边界，每次在教学库中保留 3 条验收留言。它不会清空数据；运行前应确认后端指向教师指定的教学库。需要单独检查后端时，可先设置 `$env:API_BASE = 'http://127.0.0.1:8080'`；恢复默认用 `Remove-Item Env:API_BASE`。
-
-在终端 C 中编译前后端；后端命令只运行不连接数据库的单元测试，真实数据库验收由上面的运行流程完成：
-
-```powershell
-# 从项目根目录开始。
-Set-Location .\frontend
-npm.cmd ci
-npm.cmd run build
-Set-Location ..\backend
-.\mvnw.cmd clean test package
-```
-
-`npm run build` 产物在 `frontend/dist`，后端 JAR 在 `backend/target`。本课堂使用 Vite 开发服务的 `/api` 代理启动；`vite preview` 不代表完整部署，不能单独替代前后端运行步骤。
-
-### 常见问题
-
-| 现象 | 检查方法 |
+| 现象 | 检查方式 |
 | --- | --- |
-| `java` 或 `javac` 找不到 | 安装 JDK 21，检查 `JAVA_HOME` 和 PATH，重新打开终端 |
-| Maven/npm 首次下载失败 | 检查网络与所处学校网络的仓库访问策略，再重新执行安装命令 |
-| 缺少 `DB_NAME` 等配置 | 在启动后端的同一个终端设置环境变量 |
-| MySQL 拒绝连接或账号认证失败 | 核对教师指定的主机、端口、数据库、账号及来源地址授权 |
-| 页面请求 `/api/messages` 失败 | 先确认后端已启动在 8080，再查看 Vite 终端和浏览器 Network |
-| 5173 或 8080 已被占用 | 查清占用者；不要随意关闭未知服务，按教师指引处理 |
+| 找不到 `go` 或 `node` | 检查安装与 PATH，重新打开终端 |
+| Go 依赖下载超时 | 检查网络；可在当前终端设置 `$env:GOPROXY = 'https://goproxy.cn'` 后重试 |
+| 缺少数据库配置 | 在启动后端的同一个终端设置必填环境变量 |
+| MySQL 拒绝连接或认证失败 | 核对实例、端口、库名、密码与账号来源地址 |
+| 前端显示读取失败 | 确认后端已在 8080 启动，再检查后端日志与浏览器 Network |
+| 端口被占用 | 查清占用进程，不要随意关闭未知服务 |
 
-## 8. Git 发放范围与实测记录
+## 更多文档
 
-应提交源码、`README.md`、`docs/TEACHING.md`、前端 lockfile 和完整 Maven Wrapper。`.gitignore` 排除依赖目录、构建产物、`.local`、本机配置和日志，不要提交数据库数据目录或密码。教师发布到自己的 Git 仓库后，将真实 clone 地址发给学生。
+- [工程分层与完整调用链](docs/TEACHING.md)
+- [UI 复用与素材来源](docs/UI_REUSE.md)
+- [验证记录](docs/VERIFICATION.md)
 
-本机环境安装包和隔离数据库仅用于本次验收，位于被 Git 排除的 `.local`；学生 clone 后依照本文准备自己的教学环境。
-
-2026-10-14 已在上述 Windows 环境实际验证：
-
-| 验收项 | 结果 |
-| --- | --- |
-| 官方 Maven Wrapper 3.3.4 下载并运行 Maven 3.9.11 | 通过，发行包配置 SHA-256 校验 |
-| `npm.cmd ci` 与 `npm.cmd run build` | 通过，使用提交的 lockfile |
-| `mvnw.cmd clean test package` | 通过，28 项单元/MVC 测试，0 失败、0 错误 |
-| Spring Boot 启动、schema.sql 初始化 | 通过，连接真实 MySQL 8.4.9 的指定教学库 |
-| 直连 8080 与经过 5173 代理的 GET | 均返回 `200`，路径保留 `/api/messages` |
-| 经过代理的自动接口检查 | 3 条有效留言返回 `201`，14 次无效请求被拒绝，GET 能回读 |
-| MySQL 客户端独立 SELECT 与权限检查 | 通过，应用账号仅有教学库的 SELECT、INSERT、CREATE；emoji 昵称 30 字符、内容 200 字符真实入库 |
-| 浏览器操作 | 空昵称校验、点击发布、成功后清空内容、重新 GET 列表和刷新后读取均通过；HTML 作为普通文字显示 |
-| 干净 Git clone | 从本地仓库克隆源码，重新安装前端、首次下载 Wrapper、编译测试并按 README 启动两端，均通过 |
-| 后端重启与重复建表 | 从 clone 目录启动后，GET 与重启前的 4 条完整记录快照一致；随后新发布的记录同样真实入库 |
-
-单元/MVC 测试使用 mock 隔离 Repository，只验证规则和协议；上表 MySQL 结果来自真实 MySQL 客户端查询，使用的是 `127.0.0.1:3307/campus_message_board`，不是 mock 或其他数据库。2026-10-14 验收保留 8 条留言，不随 Git 发放。原工作区的课件和教学方案未修改。
-
-2026-10-21 前端改版后，重新验证了构建、1440px/390px/320px 布局、断开服务后的错误提示与重试保留输入、手机端真实发布及刷新读取。MySQL 独立查询确认新增 `id=9`，原 8 条记录保留；当前教学库共 9 条留言。系统减少动态设置切换、真实触屏及其他浏览器未实测。
-
-本机已准备的演示环境可按被 Git 排除的 `.local/RUN-LOCAL.md` 启动；学生 clone 后使用本文的通用步骤。验收范围为上述 Windows 环境，未实测 macOS/Linux。
-
-远程 Git 仓库尚未发布：教师可将此目录推送到自己的仓库，发放实际 URL。本工程没有部署平台配置。
+本机配置、密码、数据库数据、依赖目录及构建产物均由 `.gitignore` 排除，不随 Git 分发。
