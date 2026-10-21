@@ -43,13 +43,13 @@ defineExpose({ clearContent })
     <fieldset :disabled="submitting">
       <legend class="sr-only">发布留言</legend>
       <div class="field">
-        <label for="nickname">你的昵称</label>
+        <label for="nickname">昵称</label>
         <input
           id="nickname"
           v-model="nickname"
           name="nickname"
           autocomplete="nickname"
-          placeholder="让同学们认识你"
+          placeholder="请输入昵称"
           aria-describedby="nickname-hint"
         />
         <span id="nickname-hint" class="field-hint">
@@ -65,11 +65,11 @@ defineExpose({ clearContent })
           v-model="content"
           name="content"
           rows="6"
-          placeholder="分享一个想法，或向新同学打个招呼……"
+          placeholder="请输入留言内容"
           aria-describedby="content-hint"
         ></textarea>
         <span id="content-hint" class="field-hint">
-          <span>每一条分享，都值得被看见</span>
+          <span>不能为空，最多 200 个字符</span>
           <span :class="{ 'over-limit': contentLength > 200 }">{{ contentLength }} / 200</span>
         </span>
       </div>

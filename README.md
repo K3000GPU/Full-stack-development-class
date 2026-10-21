@@ -4,6 +4,8 @@
 
 只提供查看和发布功能，不包含登录。课堂导读见 [docs/TEACHING.md](docs/TEACHING.md)。
 
+前端界面采用 `ui-portrait-music` 的人物留白风格：黑白面板、斜切导航和 GSAP 入场动效。素材来源、改造文件与验证范围见 [docs/UI_REUSE.md](docs/UI_REUSE.md)。
+
 ## 1. 运行环境
 
 | 工具 | 本次使用版本 | 用途 |
@@ -15,6 +17,7 @@
 | Maven | 3.9.11，由 Wrapper 下载 | 不需要另行安装 Maven |
 | MySQL | Community Server 8.4.9 | 保存留言 |
 | Vue / Vite | 3.5.44 / 8.3.4 | 页面与前端开发服务 |
+| GSAP | 3.15.0 | 组件内的入场动效 |
 | Spring Boot | 3.5.16 | 后端 Web 与数据库支持 |
 
 前端依赖版本由 `frontend/package-lock.json` 固定。后端依赖由 `backend/pom.xml` 固定；Maven Wrapper 3.3.4 使用官方 `only-script` 分发方式，`mvnw`、`mvnw.cmd` 和 `.mvn/wrapper/maven-wrapper.properties` 均随项目提供，首次运行会下载 Maven，无需 `maven-wrapper.jar`。
@@ -206,7 +209,9 @@ Set-Location ..\backend
 | 干净 Git clone | 从本地仓库克隆源码，重新安装前端、首次下载 Wrapper、编译测试并按 README 启动两端，均通过 |
 | 后端重启与重复建表 | 从 clone 目录启动后，GET 与重启前的 4 条完整记录快照一致；随后新发布的记录同样真实入库 |
 
-单元/MVC 测试使用 mock 隔离 Repository，只验证规则和协议；上表 MySQL 结果来自真实 MySQL 客户端查询，使用的是 `127.0.0.1:3307/campus_message_board`，不是 mock 或其他数据库。本次最终保留 8 条验收留言，不随 Git 发放。原工作区的课件和教学方案未修改。
+单元/MVC 测试使用 mock 隔离 Repository，只验证规则和协议；上表 MySQL 结果来自真实 MySQL 客户端查询，使用的是 `127.0.0.1:3307/campus_message_board`，不是 mock 或其他数据库。2026-10-14 验收保留 8 条留言，不随 Git 发放。原工作区的课件和教学方案未修改。
+
+2026-10-21 前端改版后，重新验证了构建、1440px/390px/320px 布局、断开服务后的错误提示与重试保留输入、手机端真实发布及刷新读取。MySQL 独立查询确认新增 `id=9`，原 8 条记录保留；当前教学库共 9 条留言。系统减少动态设置切换、真实触屏及其他浏览器未实测。
 
 本机已准备的演示环境可按被 Git 排除的 `.local/RUN-LOCAL.md` 启动；学生 clone 后使用本文的通用步骤。验收范围为上述 Windows 环境，未实测 macOS/Linux。
 
