@@ -1,0 +1,10 @@
+FROM golang:1.27.3-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+
+EXPOSE 8080
+CMD ["go", "run", "."]

@@ -7,6 +7,7 @@ import (
 )
 
 func TestLoadAndDSN(t *testing.T) {
+	t.Setenv("HOST", "")
 	t.Setenv("PORT", "")
 	t.Setenv("DB_HOST", "")
 	t.Setenv("DB_PORT", "")
@@ -21,8 +22,28 @@ func TestLoadAndDSN(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Port != "8080" || connection.Addr != "127.0.0.1:3306" || connection.DBName != "campus_message_board" || connection.Passwd != "special@:/?password" || !connection.ParseTime {
+	if config.Host != "127.0.0.1" || config.Port != "8080" || connection.Addr != "127.0.0.1:3306" || connection.DBName != "campus_message_board" || connection.Passwd != "special@:/?password" || !connection.ParseTime {
 		t.Fatalf("incorrect connection configuration")
+	}
+}
+
+func TestContainerAddresses(t *testing.T) {
+	t.Setenv("HOST", "0.0.0.0")
+	t.Setenv("DB_HOST", "db")
+	t.Setenv("DB_PORT", "3306")
+	t.Setenv("DB_NAME", "campus_message_board")
+	t.Setenv("DB_USERNAME", "campus_app")
+	t.Setenv("DB_PASSWORD", "container-test-password")
+	settings, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	connection, err := mysql.ParseDSN(settings.DSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Host != "0.0.0.0" || connection.Addr != "db:3306" {
+		t.Fatal("容器应监听所有接口，并通过服务名连接 MySQL")
 	}
 }
 

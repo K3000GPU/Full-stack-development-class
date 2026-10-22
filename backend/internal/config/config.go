@@ -13,6 +13,7 @@ import (
 
 // Config 只读取进程环境变量，不自动加载 .env，也不内置账号密码。
 type Config struct {
+	Host       string
 	Port       string
 	DBHost     string
 	DBPort     string
@@ -23,6 +24,7 @@ type Config struct {
 
 func Load() (Config, error) {
 	config := Config{
+		Host:   envOrDefault("HOST", "127.0.0.1"),
 		Port:   envOrDefault("PORT", "8080"),
 		DBHost: envOrDefault("DB_HOST", "127.0.0.1"), DBPort: envOrDefault("DB_PORT", "3306"),
 		DBName: os.Getenv("DB_NAME"), DBUsername: os.Getenv("DB_USERNAME"), DBPassword: os.Getenv("DB_PASSWORD"),

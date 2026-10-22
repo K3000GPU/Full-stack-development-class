@@ -1,151 +1,169 @@
 # 校园留言板
 
-使用 Vue 3、Go/Gin 和 MySQL 的留言板，支持查看和发布留言。前端采用人物背景、黑白面板与斜切导航，数据保存在真实 MySQL 中。
+基于 Vue 3、Go/Gin 和 MySQL 的留言板，支持查看和发布留言。前端包含人物背景与 GSAP 动效，数据保存在真实 MySQL 中。
 
-## 功能
+## 开发环境
 
-- 发布昵称和留言内容，成功后重新读取列表。
-- 查看按 ID 倒序排列的留言及发布时间。
-- 昵称去除首尾空白后为 1～30 个字符；内容不能为纯空白，原文最多 200 个字符。
-- 中英文和 emoji 按 Unicode code point 计数；内容保留原始空白和换行。
-- 提供加载状态、错误提示和重新加载，失败时保留表单输入。
+统一使用 **Docker Desktop** 提供 Engine、CLI 与 Compose，项目的 Node.js、Go 和 MySQL 运行在 Linux 容器中。
 
-## 环境与技术栈
+| 电脑系统 | 开发方式 | 准备文档 |
+| --- | --- | --- |
+| Windows | Docker Desktop + WSL 2 Ubuntu-24.04，启用 WSL Integration | [Windows 课前准备](docs/PREPARATION.md) |
+| macOS | Docker Desktop，直接使用 Mac Terminal 与本机源码 | [Mac 课前准备](docs/PREPARATION_MACOS.md) |
 
-| 项目 | 验证版本 |
-| --- | --- |
-| 操作系统 | Windows 11，PowerShell 7.6.5 |
-| Node.js / npm | 24.21.0 / 11.19.0 |
-| Go | 1.27.1 |
-| Gin | 1.12.0 |
-| MySQL 驱动 | go-sql-driver/mysql 1.10.1 |
-| MySQL | Community Server 8.4.9 |
-| Vue / Vite / GSAP | 3.5.44 / 8.3.4 / 3.15.0 |
+Windows 在 WSL Ubuntu 的 `~/projects` 保存源码并执行命令；Mac 直接使用本机的 `~/projects` 与 Terminal。编辑器与 Agent 打开容器实际挂载的同一份源码。两种平台的 Docker 命令均不加 sudo，浏览器统一访问 localhost。
 
-前端使用 `package-lock.json` 固定依赖解析结果。后端由 `go.mod` 声明模块版本，`go.sum` 校验下载的模块内容；`go.sum` 不是与 npm lockfile 等价的锁文件。首次安装依赖需要联网。
+| 服务 | 容器环境 | 职责 |
+| --- | --- | --- |
+| `frontend` | `node:24.22.1-bookworm-slim`；Vue 3.5.44 / Vite 8.3.4 / GSAP 3.15.0 | 前端开发服务，发布本机回环地址的 5173 端口 |
+| `backend` | `golang:1.27.3-bookworm`；Gin 1.12.0 / MySQL 驱动 1.10.1 | HTTP API，8080 端口映射到本机回环地址 |
+| `db` | `mysql:8.4.11` | 数据库存储；3306 仅供容器网络访问 |
 
-## 项目结构
+镜像固定版本标签，使用支持 amd64 / arm64 的官方镜像；Compose 不强制 CPU 架构。前端依赖解析由 `package-lock.json` 固定；后端 `go.mod` 声明模块版本，`go.sum` 校验下载内容。镜像版本为本次容器配置目标，实际验证范围见[验证记录](docs/VERIFICATION.md)。
 
-```text
-campus-message-board/
-├── frontend/
-│   ├── src/views/MessageBoard.vue       页面状态与发布后刷新
-│   ├── src/components/MessageForm.vue   输入与提交事件
-│   ├── src/components/MessageList.vue   留言与加载、错误状态
-│   ├── src/components/portrait/         人物布局与 GSAP 动效
-│   ├── src/api/messages.js              listMessages、createMessage
-│   ├── src/api/http.js                  HTTP 请求与错误处理
-│   └── vite.config.js                  5173 端口与 /api 代理
-├── backend/
-│   ├── main.go                         配置、连接模块、注册路由
-│   ├── go.mod / go.sum                  Go 模块与校验信息
-│   ├── schema.sql                      创建缺失的 messages 表
-│   └── internal/
-│       ├── config/config.go            环境变量与数据库连接参数
-│       ├── handler/message_handler.go  HTTP 解析与响应
-│       ├── service/message_service.go  输入规则与业务过程
-│       ├── repository/message_repository.go  参数化 SQL
-│       └── model/message.go            记录、请求与响应结构
-├── docs/                               调用链、UI 来源与验证说明
-└── legacy/spring-boot/                  原后端归档，不参与默认运行
-```
+## 快速启动
 
-默认请求链：浏览器 → Vite `/api` 代理 → Gin Handler → Service → Repository → MySQL。
-
-## 本地运行
-
-以下命令使用 Windows PowerShell。`npm.cmd` 可避免 `npm.ps1` 受到脚本执行策略限制。
+先按对应平台指南安装并启动 Docker Desktop。以下命令在 **Windows 的 WSL Ubuntu 终端**或 **Mac Terminal** 执行，Bash / zsh 均可，首次构建需要联网。
 
 ### 1. 获取代码
 
-```powershell
-$repoUrl = Read-Host '请输入项目 Git URL'
-git clone $repoUrl campus-message-board
-Set-Location .\campus-message-board
-node --version
-npm.cmd --version
-go version
+仓库地址以实际发布地址为准：
+
+```bash
+mkdir -p ~/projects
+cd ~/projects
+printf '项目 Git 地址：'
+IFS= read -r repo_url
+git clone "$repo_url" campus-message-board
+cd campus-message-board
 ```
 
-### 2. 初始化数据库
+已有项目时进入已有目录；开课前确认代码版本与课程通知一致。
 
-先确认要使用的 MySQL 实例、端口和账号。只在明确指定的项目实例上创建 `campus_message_board`，不要在未知实例或其他数据库中执行初始化。
+### 2. 配置本机密码
 
-```powershell
-mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root -p
+```bash
+if [ ! -f .env ]; then
+  cp .env.example .env
+fi
+chmod 600 .env
+nano .env
 ```
 
-在 MySQL 客户端中执行，将密码占位符替换为本机专用密码：
+为 `MYSQL_ROOT_PASSWORD`、`DB_PASSWORD` 分别填写两个不同的密码，保留外层单引号。示例：`DB_PASSWORD='自行设置的项目密码'`。保存方式：`Ctrl+O`、回车、`Ctrl+X`。密码不含单引号和换行；可使用至少 16 位字母数字组合。
+
+`.env` 由 Compose 读取，并通过 `environment` 将必要参数传给容器；Go 程序只读取进程环境变量。根密码仅传给 `db`，项目密码传给 `db` 与 `backend`，前端不接收数据库密码。`.env` 已被 Git 忽略。
+
+### 3. 构建并启动
+
+```bash
+docker compose config --quiet
+docker compose up --build -d --wait --wait-timeout 600
+docker compose ps
+```
+
+三个服务应为 `healthy`；打开下面的接口地址会看到 JSON 数组，空库为 `[]`。首次构建需下载镜像、npm 和 Go 依赖，首次 Go 编译也需要时间；在课前完成。
+
+`db` 首次使用空数据卷时自动创建 `campus_message_board` 数据库和 `campus_app` 账号；后端连接成功后执行 `schema.sql`，创建缺失的 `messages` 表。后端等待数据库查询就绪，前端等待后端接口就绪，避免只按进程启动顺序判断可用。
+
+### 4. 打开页面
+
+Windows 和 Mac 浏览器均访问 [http://localhost:5173](http://localhost:5173)。可直接打开 [API JSON](http://localhost:5173/api/messages) 检查读取结果。Docker Desktop 管理端口转发，无需查询虚拟机 IP。
+
+发布一条留言，刷新页面，应仍能读到。
+
+### 5. 查看真实数据库
+
+在项目根目录执行，输入 `.env` 中的 `DB_PASSWORD`：
+
+```bash
+docker compose exec db mysql -u campus_app -p campus_message_board
+```
+
+在 MySQL 提示符执行：
 
 ```sql
-CREATE DATABASE IF NOT EXISTS campus_message_board
-  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-
-CREATE USER IF NOT EXISTS 'campus_app'@'127.0.0.1'
-  IDENTIFIED BY '请替换为本机项目密码';
-
-GRANT SELECT, INSERT, CREATE ON campus_message_board.*
-  TO 'campus_app'@'127.0.0.1';
+SHOW TABLES;
+SELECT id, nickname, content, created_at
+FROM messages ORDER BY id DESC LIMIT 10;
 ```
 
-已有项目数据库和专用账号时直接使用现有配置；`IF NOT EXISTS` 不会更改已有账号密码。示例账号用于本机 TCP 连接，远程 MySQL 需要按实际来源地址授权。
+输入 `exit` 退出客户端；数据库服务继续运行。数据库数据保存在命名卷 `mysql_data` 中，Git 不复制已有留言。
 
-数据库由上述步骤预先创建。后端启动会检查连接，并执行嵌入程序的 `backend/schema.sql`；它只包含 `CREATE TABLE IF NOT EXISTS`，不会清空、重建已有表或创建其他数据库。
+## 项目结构与请求链
 
-### 3. 启动后端
-
-从项目根目录打开 PowerShell：
-
-```powershell
-Set-Location .\backend
-$env:PORT = '8080'
-$env:DB_HOST = '127.0.0.1'
-$env:DB_PORT = '3306'
-$env:DB_NAME = 'campus_message_board'
-$env:DB_USERNAME = Read-Host '请输入项目数据库用户名'
-$dbSecret = Read-Host '请输入项目数据库密码' -AsSecureString
-$env:DB_PASSWORD = [System.Net.NetworkCredential]::new('', $dbSecret).Password
-Remove-Variable dbSecret
-
-go mod download
-go run .
+```text
+campus-message-board/
+├── compose.yaml                         三个容器、网络、挂载与启动依赖
+├── .env.example                         本机密码配置模板
+├── frontend/
+│   ├── Dockerfile.dev                   前端开发镜像与 npm 依赖
+│   ├── package.json / package-lock.json  前端命令与依赖
+│   ├── vite.config.js                   开发监听地址及 /api 代理
+│   └── src/
+│       ├── views/MessageBoard.vue       页面状态、发布后刷新
+│       ├── components/MessageForm.vue   输入与提交事件
+│       ├── components/MessageList.vue   留言列表与加载、错误状态
+│       ├── components/portrait/         人物布局与 GSAP 动效
+│       └── api/                         HTTP 请求与接口函数
+├── backend/
+│   ├── Dockerfile.dev                   后端开发镜像与 Go 依赖
+│   ├── main.go                         配置、连接模块、注册路由
+│   ├── go.mod / go.sum                  Go 模块与下载校验
+│   ├── schema.sql                      创建缺失的数据表
+│   └── internal/
+│       ├── config/config.go            进程环境变量与连接参数
+│       ├── handler/message_handler.go  HTTP 解析与响应
+│       ├── service/message_service.go  输入规则与业务过程
+│       ├── repository/message_repository.go  参数化 SQL
+│       └── model/message.go            数据与响应结构
+├── scripts/verify-api.mjs               真实接口检查
+└── docs/                               环境、调用链与验证记录
 ```
 
-后端默认监听 `http://127.0.0.1:8080`。保持此终端运行。
-
-| 环境变量 | 默认值 / 要求 |
-| --- | --- |
-| `PORT` | `8080` |
-| `DB_HOST` | `127.0.0.1` |
-| `DB_PORT` | `3306` |
-| `DB_NAME` | 必填，项目数据库名 |
-| `DB_USERNAME` | 必填，项目专用账号 |
-| `DB_PASSWORD` | 必填，账号密码 |
-
-配置由当前进程的环境变量读取，不自动加载 `.env`。环境变量只对当前终端及其子进程有效；本机 MySQL 使用 `3307` 等其他端口时修改 `DB_PORT`。
-
-### 4. 启动前端
-
-从项目根目录打开另一个 PowerShell：
-
-```powershell
-Set-Location .\frontend
-npm.cmd ci
-npm.cmd run dev
+```text
+宿主机浏览器
+  → localhost:5173 → Docker Desktop 转发 → frontend 容器中的 Vite
+  → HTTP /api 代理到 backend:8080
+  → Handler → Service → Repository（同一个 Go 程序内部调用）
+  → MySQL 协议访问 db:3306 → 数据卷
 ```
 
-打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)。Vite 固定监听 `5173`，将 `/api` 代理到 `http://127.0.0.1:8080`，不改写路径。修改后端端口时也需同步修改 `frontend/vite.config.js` 的代理目标。
+浏览器中的 Vue 页面与组件负责交互；Node.js 容器提供前端开发服务。`backend`、`db` 是容器网络中的服务名，分别用于代理与数据库连接。每个容器的 `127.0.0.1` 指向自身；前端容器不能用它访问后端，后端也不能用它访问 MySQL。
 
-前后端和 MySQL 都需要保持运行。在前后端终端按 `Ctrl+C` 结束程序，停止服务不会删除数据库中的记录。
+Handler、Service、Repository 是代码分层，共同运行在一个后端容器内。Docker 管理运行环境，分层组织程序职责；两者不是同一个概念。
+
+## 日常开发
+
+```bash
+# 查看状态与日志；日志跟随后按 Ctrl+C 只结束查看。
+docker compose ps
+docker compose logs -f --tail=50 backend
+
+# Go 源码修改后重新启动后端；Vue 修改由 Vite 热更新。
+docker compose restart backend
+
+# 停止并移除本项目容器与网络，保留命名卷和留言。
+docker compose down
+
+# 下次启动。
+docker compose up -d --wait --wait-timeout 600
+```
+
+源码通过 bind mount 映射到容器，`node_modules` 与 Go 缓存分别放在命名卷中。新增或更新前端依赖后执行 `docker compose exec frontend npm ci`，再重启前端；更改 Dockerfile 后重新 `up --build`。
+
+MySQL 的初始库、账号和密码只在空数据卷首次初始化时应用。已有数据卷时修改 `.env` 不会更改数据库内的账号密码；使用原配置启动，或由了解现有配置的人执行账号变更。常规停机使用 `down`，不加 `--volumes`，不通过删除数据卷解决密码问题。已有原生 MySQL 数据不会自动迁入新卷。
+
+当前 Compose 用于本地开发，运行 Vite 与 `go run`；线上部署需要另外准备构建产物、入口与配置。
 
 ## API
 
 | 方法 | 路径 | 成功响应 |
 | --- | --- | --- |
-| GET | `/api/messages` | `200`，留言数组；没有记录时为 `[]` |
+| GET | `/api/messages` | `200`，留言数组；无记录为 `[]` |
 | POST | `/api/messages` | `201`，新建记录 |
 
-POST 请求使用 `Content-Type: application/json`：
+POST 使用 `Content-Type: application/json`：
 
 ```json
 {"nickname":"  小林  ","content":"周五有人一起去图书馆吗？"}
@@ -154,68 +172,34 @@ POST 请求使用 `Content-Type: application/json`：
 响应示例：
 
 ```json
-{
-  "id": 1,
-  "nickname": "小林",
-  "content": "周五有人一起去图书馆吗？",
-  "createdAt": "2026-10-21T19:30:00"
-}
+{"id":1,"nickname":"小林","content":"周五有人一起去图书馆吗？","createdAt":"2026-10-21T19:30:00"}
 ```
 
-`id` 和 `createdAt` 来自数据库。表字段为 `id`、`nickname`、`content`、`created_at`；JSON 使用 `createdAt`。
+`id`、`createdAt` 来自数据库；SQL 字段 `created_at` 对应 JSON 的 `createdAt`。昵称去首尾空白后为 1～30 个 Unicode code point；内容不能为纯空白，原文最多 200 个 code point，保留空白与换行。
 
-错误响应统一为 `{"message":"错误说明"}`。输入或 JSON 无效返回 `400`，非 JSON 请求返回 `415`，数据库连接不可用返回 `503`，其他服务错误返回 `500`。响应不包含数据库凭据、SQL 或异常堆栈。
+错误统一为 `{"message":"错误说明"}`。非法输入或 JSON 返回 `400`，非 JSON 请求返回 `415`，数据库不可连接返回 `503`，其他服务错误返回 `500`。发布失败时保留输入；发布成功后重新 GET 列表。
 
 ## 构建与检查
 
-```powershell
-# 后端：从项目根目录开始。
-Set-Location .\backend
-go mod verify
-go test ./...
-go build -o bin/campus-message-board.exe .
+项目已启动时，在项目根目录的 WSL Ubuntu / Mac Terminal 执行：
 
-# 前端。
-Set-Location ..\frontend
-npm.cmd ci
-npm.cmd run build
+```bash
+docker compose exec backend go mod verify
+docker compose exec backend go test ./...
+docker compose exec backend go build -o /tmp/campus-message-board .
+docker compose exec frontend npm run build
+docker compose exec frontend node /workspace/scripts/verify-api.mjs
 ```
 
-Go 单元测试不连接数据库。可执行文件位于 `backend/bin`，前端构建产物位于 `frontend/dist`；运行后端二进制时同样需要配置数据库环境变量。
+Go 单元测试不连接数据库。接口脚本请求前端容器的 5173，覆盖开发代理，每次新增并保留 3 条检查记录，不删除已有数据。发布、刷新、SQL 查询及 `down` 后重新启动共同确认完整链路与数据保存。
 
-前后端已经启动时，从项目根目录执行真实接口检查：
+## 常见问题与更多文档
 
-```powershell
-node .\scripts\verify-api.mjs
-```
-
-脚本默认请求 `http://127.0.0.1:5173`，覆盖开发代理；每次新增并保留 3 条检查记录，验证有效发布、Unicode 边界和无效输入，不删除已有数据。运行前确认服务连接的是预期项目数据库。设置 `$env:API_BASE = 'http://127.0.0.1:8080'` 可以直连后端。
-
-也可在同一数据库中独立核对结果：
-
-```sql
-SELECT DATABASE(), VERSION();
-SELECT id, nickname, content, created_at
-FROM campus_message_board.messages
-ORDER BY id DESC
-LIMIT 10;
-```
-
-## 常见问题
-
-| 现象 | 检查方式 |
-| --- | --- |
-| 找不到 `go` 或 `node` | 检查安装与 PATH，重新打开终端 |
-| Go 依赖下载超时 | 检查网络；可在当前终端设置 `$env:GOPROXY = 'https://goproxy.cn'` 后重试 |
-| 缺少数据库配置 | 在启动后端的同一个终端设置必填环境变量 |
-| MySQL 拒绝连接或认证失败 | 核对实例、端口、库名、密码与账号来源地址 |
-| 前端显示读取失败 | 确认后端已在 8080 启动，再检查后端日志与浏览器 Network |
-| 端口被占用 | 查清占用进程，不要随意关闭未知服务 |
-
-## 更多文档
-
+- [Docker Desktop 共用指南：配置、启动、排错](docs/DEVELOPMENT_DOCKER.md)
+- [Windows / WSL 课前准备](docs/PREPARATION.md)
+- [Mac / Docker Desktop 课前准备](docs/PREPARATION_MACOS.md)
 - [工程分层与完整调用链](docs/TEACHING.md)
 - [UI 复用与素材来源](docs/UI_REUSE.md)
-- [验证记录](docs/VERIFICATION.md)
+- [验证记录与尚待实机验收项](docs/VERIFICATION.md)
 
-本机配置、密码、数据库数据、依赖目录及构建产物均由 `.gitignore` 排除，不随 Git 分发。
+本机密码、依赖目录、构建产物与日志由 `.gitignore` 排除，MySQL 文件由 Docker 卷管理。

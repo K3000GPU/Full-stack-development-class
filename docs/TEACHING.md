@@ -2,6 +2,24 @@
 
 按 [README](../README.md) 启动 MySQL、Go/Gin 和 Vite。本课用 45 分钟认识工程分层与一次完整请求，不以继续学习某种后端框架为前提。
 
+## 课前准备
+
+统一 Docker Desktop：Windows 使用 WSL 2 Ubuntu-24.04，通过 WSL Integration 连接 Desktop；Mac 直接使用本机 Terminal。按 [Windows 指南](PREPARATION.md) 或 [Mac 指南](PREPARATION_MACOS.md) 准备，再执行 [共用指南](DEVELOPMENT_DOCKER.md)。
+
+Windows 在 WSL Ubuntu 的 ~/projects、Mac 在本机 ~/projects 克隆项目并配置自己的 .env，执行 `docker compose up --build -d --wait --wait-timeout 600`。Node.js、Go、MySQL 随容器提供，数据库和账号在空卷首次启动时创建，messages 表由后端创建。安装、下载和首次构建在课前完成。
+
+准备完成的标准：三个服务 healthy，宿主机浏览器能发布并刷新读取，使用 `docker compose exec db mysql -u campus_app -p campus_message_board` 查到相同记录，down 后重新启动仍可读取。各自使用自己的数据库，不依赖共享数据库或同一局域网。
+
+Windows 和 Mac 浏览器都使用 localhost:5173。编辑器与 Agent 打开同一份挂载源码，Windows 使用 WSL 工作区，Mac 使用本机工作区。教师提前验收演示工程并准备截图与录像。
+
+## Docker 中的运行关系
+
+`compose.yaml` 定义 frontend、backend、db 三个服务；Dockerfile.dev 准备工具、依赖与启动命令。前端发布本机回环地址的 5173，Vite 把 /api 代理到 backend:8080，后端访问 db:3306。后端 8080 仅映射本机回环地址，MySQL 不发布端口。
+
+容器内监听 0.0.0.0，服务间用 Compose 服务名访问，每个容器的 localhost 都代表自己。Handler、Service、Repository 是一个后端程序的三个代码职责，并不是三个容器。
+
+.env 由 Compose 读取再传给相应进程，Go 程序本身只读环境变量。前端不接收数据库密码。mysql_data 命名卷保存数据库文件；常规 down 保留卷。已有原生 MySQL 数据不会自动复制到新卷，已有卷的密码也不会随 .env 修改而自动改变。
+
 ## 目录与职责
 
 | 文件 | 职责 |
@@ -12,6 +30,8 @@
 | `frontend/src/components/portrait/PortraitLayout.vue` | 人物背景与动效，slot 保持业务组件实例 |
 | `frontend/src/api/messages.js` | 定义 listMessages、createMessage |
 | `frontend/src/api/http.js` | 发送 HTTP 并统一处理错误 |
+| `compose.yaml`、`.env.example` | 服务组合、网络、数据卷与配置模板 |
+| `frontend/Dockerfile.dev`、`backend/Dockerfile.dev` | 容器中的工具、依赖与启动命令 |
 | `frontend/vite.config.js` | 5173 端口及 /api 代理 |
 | `backend/main.go` | 启动、连接具体模块、注册路由 |
 | `backend/internal/config/config.go` | 读取环境变量并构造数据库连接参数 |
@@ -22,7 +42,7 @@
 | `backend/schema.sql` | 在指定数据库创建缺失的表 |
 | `backend/go.mod`、`backend/go.sum` | 模块版本与下载内容校验 |
 
-每层只有一个具体实现，没有 ORM、通用接口、工厂或依赖注入框架。`legacy/spring-boot` 完整保留原实现，不参与当前启动与讲解。
+每层只有一个具体实现，没有 ORM、通用接口、工厂或依赖注入框架。
 
 ## 从入口找到后端
 
@@ -116,17 +136,17 @@ INSERT INTO messages (nickname, content) VALUES (?, ?);
 | content | 留言原文 | content |
 | created_at | 数据库生成的发布时间 | createdAt |
 
-本工程继续使用已经明确指定的 `campus_message_board`，没有因为更换后端而重命名数据库或清空记录。连接同一实例后，用 SELECT 对照 POST 返回的 id，再重启后端并重新 GET，检查持久化。
+Compose 在自己的 MySQL 卷中使用 campus_message_board 数据库。用 SELECT 对照 POST 返回的 id，再 down 并重新 up，检查卷中的记录仍可读取；不迁移或清空原生 MySQL 的已有数据。
 
 ## 45 分钟安排
 
 | 时间 | 内容 | 检查点 |
 | --- | --- | --- |
-| 0～5 分钟 | clone、启动、查看成品 | 三个进程分别做什么 |
-| 5～10 分钟 | 目录、依赖、入口与配置 | main.js、main.go、go.mod、环境变量 |
+| 0～5 分钟 | 检查已有 clone、启动、查看成品 | 三个容器分别运行什么 |
+| 5～10 分钟 | 目录、依赖、入口与配置 | Compose、main.js、main.go、依赖与环境变量 |
 | 10～18 分钟 | 前端分工 | 表单事件、页面状态、API 模块 |
 | 18～28 分钟 | Go 后端分工 | 显式路由、Handler、Service、Repository |
-| 28～35 分钟 | 表、字段、主键与 SQL | INSERT 新增，SELECT 读取 |
+| 28～35 分钟 | 表、字段、主键、SQL 与数据卷 | INSERT 新增，SELECT 读取，重启保留 |
 | 35～42 分钟 | 追踪一次发布 | Network、响应、数据库记录对应 |
 | 42～45 分钟 | 用自己的话复述 | HTTP 与内部调用有什么区别 |
 

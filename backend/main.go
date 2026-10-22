@@ -71,7 +71,7 @@ func run() error {
 	router.GET("/api/messages", messageHandler.List)
 	router.POST("/api/messages", messageHandler.Create)
 
-	address := net.JoinHostPort("127.0.0.1", settings.Port)
+	address := net.JoinHostPort(settings.Host, settings.Port)
 	log.Printf("Go/Gin 后端启动：http://%s；数据库：%s:%s/%s", address, settings.DBHost, settings.DBPort, settings.DBName)
 	server := &http.Server{Addr: address, Handler: router, ReadHeaderTimeout: 5 * time.Second}
 	return server.ListenAndServe()
