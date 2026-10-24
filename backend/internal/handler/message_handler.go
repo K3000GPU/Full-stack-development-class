@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -43,8 +45,14 @@ func (handler *MessageHandler) Create(c *gin.Context) {
 		return
 	}
 	var request model.CreateMessageRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
+	decoder := json.NewDecoder(c.Request.Body)
+	if err := decoder.Decode(&request); err != nil {
 		c.JSON(http.StatusBadRequest, model.ErrorResponse{Message: "请求格式不正确，nickname 和 content 必须为字符串"})
+		return
+	}
+	// 一个请求只允许一个 JSON 值；尾部空白可接受，第二个值或其他字符都拒绝。
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		c.JSON(http.StatusBadRequest, model.ErrorResponse{Message: "请求格式不正确，请只提交一个 JSON 对象"})
 		return
 	}
 	message, err := handler.service.Create(c.Request.Context(), request.Nickname, request.Content)
