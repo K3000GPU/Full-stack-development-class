@@ -2,6 +2,18 @@
 
 主流程按[共用指南](DEVELOPMENT_DOCKER.md)执行 `docker compose up --build -d --wait --wait-timeout 600`。仅当镜像拉取超时（包括构建器读取 Go / Node 基础镜像信息超时）时，使用本文件的备用方案。已成功构建启动时，继续页面与数据库验收即可。
 
+## 镜像请求超时的处理顺序
+
+先等待并重试原命令。确认在拉取镜像或读取基础镜像 metadata 阶段出现 `DeadlineExceeded: context deadline exceeded`、`net/http: TLS handshake timeout` 等超时后，可逐个拉取，已成功的镜像跳过：
+
+```bash
+docker pull golang:1.27.3-bookworm
+docker pull node:24.22.1-bookworm-slim
+docker pull mysql:8.4.11
+```
+
+拉取成功后回项目目录重试主流程。单独拉取是可选步骤，不能保证后续构建不访问网络；仍超时也可直接按下文导入完整镜像。`npm ci`、`go mod download` 报错或容器未 healthy 时，按对应日志排查，不能只凭 `DeadlineExceeded` 就判定为镜像请求超时。`--wait-timeout 600` 仅控制服务就绪等待时间。
+
 ## 1. 确认平台与准备文件
 
 在 Ubuntu / Mac Terminal 执行：

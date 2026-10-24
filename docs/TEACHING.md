@@ -4,13 +4,13 @@
 
 ## 课前准备
 
-统一 Docker Desktop：Windows 使用 WSL 2 Ubuntu 26.04.1 LTS（发行版名称 `Ubuntu`），通过 WSL Integration 连接 Desktop；Mac 直接使用本机 Terminal。按 [Windows 指南](PREPARATION.md) 或 [Mac 指南](PREPARATION_MACOS.md) 准备，再执行 [共用指南](DEVELOPMENT_DOCKER.md)。
+Windows 使用 Docker Desktop，参考环境为 WSL 2 Ubuntu 26.04.1 LTS（示例发行版名称 `Ubuntu`），通过 WSL Integration 连接 Desktop；Mac 使用 OrbStack，在本机 Terminal 选择 `orbstack` context。按 [Windows 指南](PREPARATION.md) 或 [Mac 指南](PREPARATION_MACOS.md) 准备，再执行 [共用指南](DEVELOPMENT_DOCKER.md)。
 
 Windows 在 WSL Ubuntu 的 ~/projects、Mac 在本机 ~/projects 克隆项目并配置自己的 .env，按[共用指南](DEVELOPMENT_DOCKER.md)执行 `docker compose up --build -d --wait --wait-timeout 600`。Node.js、Go、MySQL 随容器提供，数据库和账号在空卷首次启动时创建，messages 表由后端创建。安装、镜像下载、首次构建与验收在课前完成。镜像拉取超时时才切换到[本地镜像备用方案](IMAGE_DISTRIBUTION.md)，导入课程提供的完整镜像后继续验收。
 
-准备完成的标准：三个服务 healthy，宿主机浏览器能发布并刷新读取，使用 `docker compose exec db mysql -u campus_app -p campus_message_board` 查到相同记录，down 后重新启动仍可读取。各自使用自己的数据库，不依赖共享数据库或同一局域网。
+准备完成的标准：三个服务 healthy，宿主机浏览器能发布并刷新读取，使用 `docker compose exec db mysql --default-character-set=utf8mb4 -u campus_app -p campus_message_board` 查到相同记录，down 后重新启动仍可读取。各自使用自己的数据库，不依赖共享数据库或同一局域网。
 
-Windows 和 Mac 浏览器都使用 localhost:5173。编辑器与 Agent 打开同一份挂载源码，Windows 使用 WSL 工作区，Mac 使用本机工作区。可对照[验证记录](VERIFICATION.md)中的截图检查自己的运行结果。
+Windows 和 Mac 浏览器都使用 localhost:5173。编辑器与 Agent 打开同一份挂载源码，Windows 使用 WSL 工作区，Mac 使用本机工作区。按[页面、SQL 与持久化验收](DEVELOPMENT_DOCKER.md#5-页面sql-与持久化验收)检查实际运行结果。
 
 ## Docker 中的运行关系
 
@@ -74,21 +74,21 @@ router.POST("/api/messages", messageHandler.Create)
 | 顺序 | 文件与方法位置 | 发生的事情 | 调用类型 |
 | --- | --- | --- | --- |
 | 1 | [MessageForm.vue](../frontend/src/components/MessageForm.vue) 第 16 行 `handleSubmit()` | 检查输入，发出 `submit` 事件 | Vue 组件事件，浏览器内部 |
-| 2 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue) 第 30 行 `publishMessage(payload)` | 设置提交状态，调用 createMessage | JavaScript 内部调用 |
+| 2 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue) 第 35 行 `publishMessage(payload)` | 设置提交状态，调用 createMessage | JavaScript 内部调用 |
 | 3 | [messages.js](../frontend/src/api/messages.js) 第 8 行 `createMessage(message)` → [http.js](../frontend/src/api/http.js) 第 2 行 `request()` | 准备 POST 路径、JSON 和请求头 | JavaScript 内部调用 |
 | 4 | `http.js` 第 6 行 `fetch()` → [vite.config.js](../frontend/vite.config.js) 第 10 行转发 | 浏览器发往 5173，Vite 转发到 8080；路径仍为 /api/messages | **HTTP POST 与 HTTP 转发** |
 | 5 | [main.go](../backend/main.go) 第 72 行 `router.POST()` | 根据方法和路径，调用 MessageHandler.Create | HTTP 路由分发 |
-| 6 | [message_handler.go](../backend/internal/handler/message_handler.go) 第 40 行 `Create()` | ShouldBindJSON 解析为 CreateMessageRequest，调用 Service | Go 内部调用 |
+| 6 | [message_handler.go](../backend/internal/handler/message_handler.go) 第 42 行 `Create()` | json.Decoder 解析为 CreateMessageRequest，再确认尾部为 EOF，调用 Service | Go 内部调用 |
 | 7 | [message_service.go](../backend/internal/service/message_service.go) 第 31 行 `Create()`、第 39 行 `validateInput()` | 昵称去首尾空白；按 Unicode 字符数检查长度；拒绝空白内容，再调用 Repository | Go 内部调用 |
 | 8 | [message_repository.go](../backend/internal/repository/message_repository.go) 第 38 行 `Insert()`、第 46 行 `ExecContext()` | 事务内执行 `INSERT ... VALUES (?, ?)`，输入作为参数传入 | **database/sql + MySQL 通信** |
 | 9 | 同一文件第 50 行 `LastInsertId()`、第 55 行 `QueryRowContext()`、第 61 行 `Commit()` | 取得真实主键，按 id 回读并 Scan 到 Message；提交成功后才返回 | MySQL 通信，随后 Go 内部返回 |
 | 10 | [message.go](../backend/internal/model/message.go) 第 25 行 `NewMessageResponse()` → Handler 的 `c.JSON()` | 转换 createdAt，返回刚保存的记录和 201 | Go 内部调用，随后 **HTTP 响应** |
-| 11 | `MessageBoard.vue` 第 46 行 → `MessageForm.vue` 第 33 行 `clearContent()` | 收到 POST 成功后清空内容、保留昵称，调用 loadMessages | JavaScript 内部调用 |
-| 12 | `MessageBoard.vue` 第 17 行 `loadMessages()` → `messages.js` 第 4 行 `listMessages()` → `http.js` 的 fetch | 重新请求完整列表 | **新的 HTTP GET /api/messages** |
-| 13 | `main.go` 第 71 行 → `MessageHandler.List()` 第 27 行 → `MessageService.List()` 第 26 行 → `MessageRepository.FindAll()` 第 19 行 | QueryContext 执行 SELECT，逐行 Scan，Handler 返回响应数组和 200 | Go 内部调用 + MySQL 通信，随后 HTTP 响应 |
-| 14 | `MessageBoard.vue` 第 21 行 → `MessageList.vue` 第 33 行 `v-for` | 使用 GET 结果更新状态并重新渲染 | Vue 响应式更新，浏览器内部 |
+| 11 | `MessageBoard.vue` 第 51 行 → `MessageForm.vue` 第 33 行 `clearContent()` | 收到 POST 成功后清空内容、保留昵称，调用 loadMessages | JavaScript 内部调用 |
+| 12 | `MessageBoard.vue` 第 18 行 `loadMessages()` → `messages.js` 第 4 行 `listMessages()` → `http.js` 的 fetch | 重新请求完整列表 | **新的 HTTP GET /api/messages** |
+| 13 | `main.go` 第 71 行 → `MessageHandler.List()` 第 29 行 → `MessageService.List()` 第 26 行 → `MessageRepository.FindAll()` 第 19 行 | QueryContext 执行 SELECT，逐行 Scan，Handler 返回响应数组和 200 | Go 内部调用 + MySQL 通信，随后 HTTP 响应 |
+| 14 | `MessageBoard.vue` 第 25 行 → `MessageList.vue` 第 33 行 `v-for` | 仅使用最新一次 GET 的结果更新状态并重新渲染 | Vue 响应式更新，浏览器内部 |
 
-首次进入页面，`MessageBoard.vue` 第 66 行 `onMounted(refreshMessages)` 经第 59 行的 refreshMessages 读取列表，走第 12～14 步。
+首次进入页面，`MessageBoard.vue` 第 71 行 `onMounted(refreshMessages)` 经第 64 行的 refreshMessages 读取列表，走第 12～14 步。
 
 POST 内部为取得新记录而执行的 SELECT，属于该 POST 的后端过程。发布后页面重新请求列表，是另一次独立 GET。
 
@@ -118,9 +118,9 @@ Vite :5173 ── HTTP 转发，保留路径 ──→ Go/Gin :8080
 
 Service 的 `validateInput()` 检查昵称和内容，`utf8.RuneCountInString()` 与前端 Array.from 的长度规则一致。`trimWhitespace()` 采用与 JavaScript String.trim 一致的空白集合，包含 NBSP 和 FEFF。昵称归一化后保存；内容保留原文。
 
-Handler 把 ValidationError 转为 400，把非法 JSON 与非字符串字段作为 400，把非 JSON 请求作为 415。数据库不可连接时返回 503，其他内部错误返回 500；详情只写服务端日志。
+Handler 把 ValidationError 转为 400，把非法 JSON 与非字符串字段作为 400，把非 JSON 请求作为 415。解析完一个 JSON 值后，第二次 Decode 必须返回 EOF：尾部空白允许，第二个对象、null 或其他字符拒绝，避免只取首段数据。数据库不可连接时返回 503，其他内部错误返回 500；详情只写服务端日志。
 
-前端 request 抛出的 Error 由页面捕获并展示。读取失败与空列表分别显示；重试保留草稿。若 POST 成功而 GET 失败，会明确提示已发布，避免重复提交。
+前端 request 抛出的 Error 由页面捕获并展示。读取失败与空列表分别显示；重试保留草稿。每次列表请求递增编号，仅最新请求能修改列表、错误和加载状态，旧请求晚返回或失败都不覆盖新结果。若 POST 成功而 GET 失败，会明确提示已发布，避免重复提交。
 
 Repository 中重点看两条 SQL：
 

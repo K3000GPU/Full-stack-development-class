@@ -1,19 +1,19 @@
-# Docker Desktop 开发环境共用指南
+# Docker Compose 开发环境共用指南
 
-Windows 先按 [Windows 指南](PREPARATION.md) 安装 Docker Desktop、WSL 2 Ubuntu 并启用 WSL Integration；Mac 先按 [Mac 指南](PREPARATION_MACOS.md) 安装 Docker Desktop。之后使用本文的同一套项目命令。
+Windows 先按 [Windows 指南](PREPARATION.md) 安装 Docker Desktop、WSL 2 Ubuntu 并启用 WSL Integration；Mac 先按 [Mac 指南](PREPARATION_MACOS.md) 安装 OrbStack，并选择 `orbstack` context。之后使用本文的同一套项目命令。
 
 | 平台 | 执行命令的位置 | 源码位置 |
 | --- | --- | --- |
 | Windows | WSL 2 的 Ubuntu 26.04.1 LTS 终端（发行版名称 `Ubuntu`） | Ubuntu 的 `~/projects/Full-stack-development-class` |
 | Mac | macOS Terminal，Bash / zsh 均可 | Mac 的 `~/projects/Full-stack-development-class` |
 
-Docker 命令统一写成 **`docker ...`，不加 sudo**。Docker Desktop 提供 Engine、CLI 和 Compose；Node.js、Go、MySQL 随项目容器提供。两种平台的浏览器都使用 `http://localhost:5173`。
+Docker 命令统一写成 **`docker ...`，不加 sudo**。Windows 的 Docker Desktop、Mac 的 OrbStack 提供 Engine、CLI 和 Compose；Node.js、Go、MySQL 随项目容器提供。两种平台的浏览器都使用 `http://localhost:5173`。
 
 本项目的三个服务为 `frontend`（前端）、`backend`（后端）和 `db`（数据库）。`db` 是 **database** 的缩写，也是 Compose 中 MySQL 的服务名；后端配置 `DB_HOST: db`，表示通过该服务名连接 MySQL。连接后使用的数据库名为 `campus_message_board`。
 
-## 1. 检查 Docker Desktop 已启动
+## 1. 检查容器引擎已启动
 
-先打开宿主机上的 Docker Desktop，等待 Engine 运行，再在上述终端执行：
+先打开宿主机上的 Docker Desktop（Windows）或 OrbStack（Mac），等待 Engine 运行，再在上述终端执行：
 
 ```bash
 git --version
@@ -28,7 +28,7 @@ docker version --format '{{.Server.Os}}/{{.Server.Arch}}'
 
 应看到 Git 版本、Docker 的 Client 与 Server 信息、Compose 版本以及 Engine 的 Linux 平台和架构。默认按下面的主流程构建启动；镜像拉取超时时使用本地镜像备用方案。
 
-Docker Desktop 的 Containers 页面可查看容器状态和日志；终端与界面应能看到同一个项目。
+Docker Desktop / OrbStack 的容器管理界面可查看状态和日志；终端与界面应能看到同一个项目。
 
 ## 2. 获取代码
 
@@ -67,7 +67,7 @@ nano .env
 
 `cp -n` 表示目标 `.env` 已存在时跳过复制，保留已有配置和密码；不存在时才从 `.env.example` 创建。
 
-为两个变量分别设置不同的密码：
+为两个变量自行设置密码，可以相同，但都不能为空：
 
 ```dotenv
 MYSQL_ROOT_PASSWORD='自行设置的管理密码'
@@ -83,7 +83,7 @@ DB_PASSWORD='自行设置的项目密码'
 
 Compose 把 `.env` 的 `DB_PASSWORD` 作为 `MYSQL_PASSWORD` 传给 `db`，用于首次创建 `campus_app`；同时以 `DB_PASSWORD` 传给后端，因此这两处必须使用同一个项目密码。后端日常通过应用账号访问项目库，管理密码留给数据库管理操作；前端和浏览器都不接收这两个密码。
 
-例如，执行 `docker compose exec db mysql -u campus_app -p campus_message_board` 后，应在密码提示符输入 **`DB_PASSWORD`**。`root` 在这里指 MySQL 管理员；Ubuntu 登录和 `sudo` 使用的是 Linux 用户密码，与这两项分别配置。
+例如，执行 `docker compose exec db mysql --default-character-set=utf8mb4 -u campus_app -p campus_message_board` 后，应在密码提示符输入 **`DB_PASSWORD`**。`root` 在这里指 MySQL 管理员；Ubuntu 登录和 `sudo` 使用的是 Linux 用户密码，与这两项分别配置。
 
 这两项只在 MySQL 空数据卷首次初始化时设置对应账号的密码。已有数据卷时，仅编辑 `.env` 或重建容器不会修改数据库中已保存的密码；需要变更时，应由管理员在数据库内修改账号密码并同步配置，保留已有数据库和数据卷。
 
@@ -119,14 +119,14 @@ docker compose ps
 - [留言板页面](http://localhost:5173)。
 - [查看接口 JSON](http://localhost:5173/api/messages)，空库返回 `[]`。
 
-Docker Desktop 将已发布的容器端口转发到宿主机，参考 [Docker Desktop 网络说明](https://docs.docker.com/desktop/features/networking/)。本项目把 5173、8080 发布到本机回环地址，MySQL 3306 只在容器网络中使用。
+Docker Desktop / OrbStack 将已发布的容器端口转发到宿主机。本项目把 5173、8080 发布到本机回环地址，MySQL 3306 只在容器网络中使用。
 
 ## 5. 页面、SQL 与持久化验收
 
 从页面发布一条自己能识别的留言，再刷新。然后在项目根目录登录数据库容器：
 
 ```bash
-docker compose exec db mysql -u campus_app -p campus_message_board
+docker compose exec db mysql --default-character-set=utf8mb4 -u campus_app -p campus_message_board
 
 ```
 
@@ -180,6 +180,8 @@ docker compose restart backend
 ```bash
 docker compose exec backend go test ./...
 
+docker compose exec frontend npm test
+
 docker compose exec frontend npm run build
 
 docker compose exec frontend node /workspace/scripts/verify-api.mjs
@@ -205,10 +207,10 @@ docker compose logs --tail=80 db backend frontend
 
 | 现象 | 检查方式 |
 | --- | --- |
-| 找不到 docker | Windows 核对 `Ubuntu` 的 WSL Integration；Mac 按安装指南检查 CLI 路径并重开终端 |
-| 无 Server 信息 / 无法连接 daemon | 确认 Docker Desktop 已启动并等待 Engine 就绪；核对当前 context 与是否设置过 DOCKER_HOST |
+| 找不到 docker | Windows 核对 `Ubuntu` 的 WSL Integration；Mac 确认 OrbStack 已完成设置，并重开终端 |
+| 无 Server 信息 / 无法连接 daemon | 确认对应平台的容器引擎已启动；核对当前 context 与是否设置过 DOCKER_HOST，Mac 使用 `orbstack` |
 | Docker 权限错误 | 不通过加 sudo 绕过；先核对是否误连了 WSL 中原先的独立 Engine |
-| Containers 界面与终端看到的项目不同 | 检查 context、DOCKER_HOST 和 WSL Integration，确保连接同一套 Docker Desktop；不要盲目切换或重置 |
+| 容器管理界面与终端看到的项目不同 | 检查 context、DOCKER_HOST；Windows 还需检查 WSL Integration，确保连接准备指南指定的同一套引擎，不重置已有环境 |
 | 提示密码变量未设置 | 确认在项目根目录，检查 `.env` 中两个密码非空 |
 | 镜像拉取 / 基础镜像信息读取超时 | 使用[本地镜像备用方案](IMAGE_DISTRIBUTION.md)，导入课程提供的完整应用镜像与 MySQL 镜像后启动 |
 | 备用方案提示缺少本地镜像 / No such image | 核对课程镜像包导入结果、`docker compose config --images` 与本机镜像名及标签，使用同一课程版本 |
@@ -216,18 +218,18 @@ docker compose logs --tail=80 db backend frontend
 | 备用方案提示缺少 npm / Go 依赖 | 核对源码、完整应用镜像和依赖卷是否为同一批次，核对镜像包版本及校验结果，保留已有卷 |
 | unhealthy / 首次启动超时 | 查看相应容器日志；确认首次编译或数据库初始化是否仍在进行，再重试等待 |
 | MySQL 认证失败 | 核对初始化时密码与当前 Engine，保留卷，不通过删卷重设密码 |
-| localhost:5173 打不开 | 检查 Desktop、三服务健康状态和 Ports 映射；Windows / Mac 浏览器均使用 localhost，不使用虚拟机 IP |
-| Mac 提示挂载被拒绝 | 项目放在 `~/projects`，检查 Desktop 的 File sharing 及系统目录访问权限；见 [Desktop 设置说明](https://docs.docker.com/desktop/settings-and-maintenance/settings/) |
+| localhost:5173 打不开 | 检查 Docker Desktop / OrbStack、三服务健康状态和端口映射；Windows / Mac 浏览器均使用 localhost，不使用虚拟机 IP |
+| Mac 提示挂载被拒绝 | 项目放在 Mac 的 `~/projects`，确认 OrbStack 能访问该目录，编辑器使用同一份源码 |
 | 改代码页面没变 | 确认编辑的是实际挂载源码，Windows 优先从 WSL 工作区编辑；检查 Vite 日志，必要时重启前端 |
-| Go 编译进程被 Killed | 检查 Desktop / WSL 的可用内存，适当调整资源再重试 |
+| Go 编译进程被 Killed | 检查容器引擎和宿主机可用内存，适当调整资源再重试 |
 
 ## 课前完成清单
 
-- [ ] Docker Desktop 已启动，Client、Server 与 Compose 检查通过。
+- [ ] 对应平台的容器引擎已启动，Client、Server 与 Compose 检查通过。
 - [ ] Windows WSL Integration 正常；Mac 使用本机 Terminal 和项目目录。
 - [ ] 编辑器与 Agent 打开容器实际挂载的同一份源码。
 - [ ] 三个服务 healthy，宿主机浏览器可以打开 localhost:5173。
 - [ ] 发布、刷新与 SQL 结果对应，down / up 后记录仍在。
-- [ ] 主流程构建通过，或拉取超时后通过备用方案导入启动；知道在 Desktop 界面及终端查看状态和日志。
+- [ ] 主流程构建通过，或拉取超时后通过备用方案导入启动；知道在容器管理界面及终端查看状态和日志。
 
 反馈完成情况或错误信息即可，不发送密码与 `.env`。

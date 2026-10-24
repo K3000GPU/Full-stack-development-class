@@ -4,12 +4,12 @@
 
 ## 开发环境
 
-统一使用 **Docker Desktop** 提供 Engine、CLI 与 Compose，项目的 Node.js、Go 和 MySQL 运行在 Linux 容器中，无需在宿主机另行安装这三个运行环境。
+Windows 使用 **Docker Desktop**，Mac 使用 **OrbStack** 提供 Docker Engine、CLI 与 Compose。项目的 Node.js、Go 和 MySQL 运行在 Linux 容器中，无需在宿主机另行安装这三个运行环境。
 
 | 电脑系统 | 开发方式 | 准备文档 |
 | --- | --- | --- |
 | Windows | Docker Desktop + WSL 2 Ubuntu 26.04.1 LTS（发行版名称 `Ubuntu`），启用 WSL Integration | [Windows 环境准备](docs/PREPARATION.md) |
-| macOS | Docker Desktop，直接使用 Mac Terminal 与本机源码 | [Mac 环境准备](docs/PREPARATION_MACOS.md) |
+| macOS | OrbStack，直接使用 Mac Terminal 与本机源码，选择 `orbstack` context | [Mac 环境准备](docs/PREPARATION_MACOS.md) |
 
 Windows 在 WSL Ubuntu 的 `~/projects` 保存源码并执行命令；Mac 直接使用本机的 `~/projects` 与 Terminal。编辑器与 Agent 打开容器实际挂载的同一份源码。两种平台的 Docker 命令均不加 sudo，浏览器统一访问 localhost。
 
@@ -27,7 +27,7 @@ Windows 在 WSL Ubuntu 的 `~/projects` 保存源码并执行命令；Mac 直接
 
 ## 快速启动
 
-先按对应平台指南安装并启动 Docker Desktop。以下命令在 **Windows 的 WSL Ubuntu 终端**或 **Mac Terminal** 执行，Bash / zsh 均可；默认通过 Compose 下载所需镜像、构建并启动。镜像拉取超时时，可使用匹配项目版本与架构的本地镜像备用方案。
+先按对应平台指南安装并启动 Docker Desktop（Windows）或 OrbStack（Mac）。以下命令在 **Windows 的 WSL Ubuntu 终端**或 **Mac Terminal** 执行，Bash / zsh 均可；默认通过 Compose 下载所需镜像、构建并启动。镜像拉取超时时，可使用匹配项目版本与架构的本地镜像备用方案。
 
 ### 1. 获取代码
 
@@ -44,7 +44,7 @@ cd Full-stack-development-class
 
 ```
 
-已有项目时进入已有目录，同步代码前先保存本机改动。确认 Docker Desktop 已就绪：
+已有项目时进入已有目录，同步代码前先保存本机改动。确认容器引擎已就绪：
 
 ```bash
 docker version
@@ -52,7 +52,7 @@ docker compose version
 docker version --format '{{.Server.Os}}/{{.Server.Arch}}'
 ```
 
-应能看到 Docker Client、Server、Compose 版本及 `linux/amd64` 或 `linux/arm64`。若没有 Server 信息，先检查 Docker Desktop、当前 context 和 Windows 的 WSL Integration。
+应能看到 Docker Client、Server、Compose 版本及 `linux/amd64` 或 `linux/arm64`。若没有 Server 信息，检查对应平台的容器引擎与当前 context；Windows 还需检查 WSL Integration，Mac 按准备指南选择 `orbstack` context。
 
 ### 2. 配置本机密码
 
@@ -112,7 +112,7 @@ docker compose ps
 
 ### 4. 打开页面
 
-Windows 和 Mac 浏览器均访问 [http://localhost:5173](http://localhost:5173)。可直接打开 [API JSON](http://localhost:5173/api/messages) 检查读取结果。Docker Desktop 管理端口转发，无需查询虚拟机 IP。
+Windows 和 Mac 浏览器均访问 [http://localhost:5173](http://localhost:5173)。可直接打开 [API JSON](http://localhost:5173/api/messages) 检查读取结果。Docker Desktop / OrbStack 管理端口转发，无需查询虚拟机 IP。
 
 发布一条留言，刷新页面，应仍能读到。
 
@@ -121,7 +121,7 @@ Windows 和 Mac 浏览器均访问 [http://localhost:5173](http://localhost:5173
 在项目根目录执行，输入 `.env` 中的 `DB_PASSWORD`：
 
 ```bash
-docker compose exec db mysql -u campus_app -p campus_message_board
+docker compose exec db mysql --default-character-set=utf8mb4 -u campus_app -p campus_message_board
 
 ```
 
@@ -170,7 +170,7 @@ Full-stack-development-class/
 
 ```text
 宿主机浏览器
-  → localhost:5173 → Docker Desktop 转发 → frontend 容器中的 Vite
+  → localhost:5173 → Docker Desktop / OrbStack 转发 → frontend 容器中的 Vite
   → HTTP /api 转发到 backend:8080
   → Handler → Service → Repository（同一个 Go 程序内部调用）
   → MySQL 协议访问 db:3306 → 数据卷
@@ -239,22 +239,24 @@ docker compose exec backend go test ./...
 
 docker compose exec backend go build -o /tmp/campus-message-board .
 
+docker compose exec frontend npm test
+
 docker compose exec frontend npm run build
 
 docker compose exec frontend node /workspace/scripts/verify-api.mjs
 
 ```
 
-Go 单元测试不连接数据库。接口脚本请求前端容器的 5173，覆盖开发转发，每次新增并保留 3 条检查记录，不删除已有数据。脚本不会使用模拟数据库，运行前确认连接的是本次项目库。
+Go 单元测试不连接数据库；前端回归测试检查页面的并发请求与失败状态，不访问 HTTP 或数据库。接口脚本请求前端容器的 5173，覆盖开发转发，每次新增并保留 3 条检查记录，不删除已有数据。脚本不会使用模拟数据库，运行前确认连接的是本次项目库。
 
 验收时对照页面、POST 响应和 MySQL 查询中的同一条记录，记下 id、昵称、内容、时间与总数；普通 `down` 后重新启动，再查询并刷新页面核对。完整步骤见[页面、SQL 与持久化验收](docs/DEVELOPMENT_DOCKER.md#5-页面sql-与持久化验收)。这些是验收方法，不能仅凭配置文件或健康检查替代实际验收。
 
 ## 常见问题与更多文档
 
-- [Docker Desktop 共用指南：配置、启动、排错](docs/DEVELOPMENT_DOCKER.md)
+- [Docker Compose 共用指南：配置、启动、排错](docs/DEVELOPMENT_DOCKER.md)
 - [镜像拉取超时：本地镜像备用方案](docs/IMAGE_DISTRIBUTION.md)
 - [Windows / WSL 环境准备](docs/PREPARATION.md)
-- [Mac / Docker Desktop 环境准备](docs/PREPARATION_MACOS.md)
+- [Mac / OrbStack 环境准备](docs/PREPARATION_MACOS.md)
 - [工程分层与完整调用链](docs/TEACHING.md)
 
 本机密码、依赖目录、构建产物与日志由 `.gitignore` 排除，MySQL 文件由 Docker 卷管理。
