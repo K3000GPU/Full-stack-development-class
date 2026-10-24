@@ -4,12 +4,12 @@
 
 ## 开发环境
 
-统一使用 **Docker Desktop** 提供 Engine、CLI 与 Compose，项目的 Node.js、Go 和 MySQL 运行在 Linux 容器中。
+统一使用 **Docker Desktop** 提供 Engine、CLI 与 Compose，项目的 Node.js、Go 和 MySQL 运行在 Linux 容器中，无需在宿主机另行安装这三个运行环境。
 
 | 电脑系统 | 开发方式 | 准备文档 |
 | --- | --- | --- |
-| Windows | Docker Desktop + WSL 2 Ubuntu 26.04.1 LTS（发行版名称 `Ubuntu`），启用 WSL Integration | [Windows 课前准备](docs/PREPARATION.md) |
-| macOS | Docker Desktop，直接使用 Mac Terminal 与本机源码 | [Mac 课前准备](docs/PREPARATION_MACOS.md) |
+| Windows | Docker Desktop + WSL 2 Ubuntu 26.04.1 LTS（发行版名称 `Ubuntu`），启用 WSL Integration | [Windows 环境准备](docs/PREPARATION.md) |
+| macOS | Docker Desktop，直接使用 Mac Terminal 与本机源码 | [Mac 环境准备](docs/PREPARATION_MACOS.md) |
 
 Windows 在 WSL Ubuntu 的 `~/projects` 保存源码并执行命令；Mac 直接使用本机的 `~/projects` 与 Terminal。编辑器与 Agent 打开容器实际挂载的同一份源码。两种平台的 Docker 命令均不加 sudo，浏览器统一访问 localhost。
 
@@ -21,15 +21,17 @@ Windows 在 WSL Ubuntu 的 `~/projects` 保存源码并执行命令；Mac 直接
 
 `db` 是 **database（数据库）** 的缩写，在本项目中是 `compose.yaml` 为 MySQL 定义的服务名。后端通过这个服务名找到 MySQL，因此配置为 `DB_HOST: db`；实际存放留言的数据库名则是 `campus_message_board`。
 
-镜像固定版本标签，使用支持 amd64 / arm64 的官方镜像；Compose 不强制 CPU 架构。前端依赖解析由 `package-lock.json` 固定；后端 `go.mod` 声明模块版本，`go.sum` 校验下载内容。镜像版本为本次容器配置目标，实际验证范围见[验证记录](docs/VERIFICATION.md)。
+上表版本来自当前 `compose.yaml`、Dockerfile 和依赖文件，表示配置目标，不代表已在 Windows、Mac 和各 CPU 架构上全部完成实机验收。Compose 不强制 CPU 架构；本地镜像包则必须与 Docker Engine 架构匹配。
+
+前端依赖解析由 `package-lock.json` 固定；后端 `go.mod` 声明模块版本，`go.sum` 校验下载内容。镜像使用具体版本标签，不使用浮动的基础镜像版本。
 
 ## 快速启动
 
-先按对应平台指南安装并启动 Docker Desktop。以下命令在 **Windows 的 WSL Ubuntu 终端**或 **Mac Terminal** 执行，Bash / zsh 均可；默认通过 Compose 下载所需镜像、构建并启动。镜像拉取超时时，再使用课程提供的本地镜像备用方案。
+先按对应平台指南安装并启动 Docker Desktop。以下命令在 **Windows 的 WSL Ubuntu 终端**或 **Mac Terminal** 执行，Bash / zsh 均可；默认通过 Compose 下载所需镜像、构建并启动。镜像拉取超时时，可使用匹配项目版本与架构的本地镜像备用方案。
 
 ### 1. 获取代码
 
-课程仓库：[Yhimhas/Full-stack-development-class](https://github.com/Yhimhas/Full-stack-development-class)。仓库根目录即留言板项目，克隆时保留默认目录名 `Full-stack-development-class`：
+项目仓库：[Yhimhas/Full-stack-development-class](https://github.com/Yhimhas/Full-stack-development-class)。仓库根目录即留言板项目，克隆时保留默认目录名 `Full-stack-development-class`：
 
 ```bash
 mkdir -p ~/projects
@@ -42,7 +44,15 @@ cd Full-stack-development-class
 
 ```
 
-已有项目时进入已有目录；开课前确认代码版本与课程通知一致。
+已有项目时进入已有目录，同步代码前先保存本机改动。确认 Docker Desktop 已就绪：
+
+```bash
+docker version
+docker compose version
+docker version --format '{{.Server.Os}}/{{.Server.Arch}}'
+```
+
+应能看到 Docker Client、Server、Compose 版本及 `linux/amd64` 或 `linux/arm64`。若没有 Server 信息，先检查 Docker Desktop、当前 context 和 Windows 的 WSL Integration。
 
 ### 2. 配置本机密码
 
@@ -67,7 +77,7 @@ nano .env
 | 密码 | 对应 MySQL 账号 | 使用场景 |
 | --- | --- | --- |
 | `MYSQL_ROOT_PASSWORD`（管理密码） | `root` 管理员 | 数据库、账号和权限管理；仅传给 `db` 容器 |
-| `DB_PASSWORD`（项目密码） | `campus_app` 应用账号 | 后端连接项目库，执行建表、查询和新增留言；课堂用 `mysql -u campus_app -p` 查询时也输入这个密码 |
+| `DB_PASSWORD`（项目密码） | `campus_app` 应用账号 | 后端连接项目库，执行建表、查询和新增留言；手动用 `mysql -u campus_app -p` 查询时也输入这个密码 |
 
 Compose 用 `DB_PASSWORD` 同时配置数据库容器的 `MYSQL_PASSWORD` 和后端的 `DB_PASSWORD`，使应用账号与后端使用同一个密码。Ubuntu 登录或 `sudo` 的 Linux 用户密码与这两项分别配置。已有数据卷时，修改 `.env` 不会自动修改数据库账号密码；详细说明见[密码配置指南](docs/DEVELOPMENT_DOCKER.md#3-配置本机密码)。
 
@@ -86,9 +96,17 @@ docker compose ps
 
 ```
 
-三个服务应为 `healthy`；打开下面的接口地址会看到 JSON 数组，空库为 `[]`。首次构建需要下载镜像、npm 与 Go 依赖并编译 Go，请在课前完成。
+三个服务应为 `healthy`；打开下面的接口地址会看到 JSON 数组，空库为 `[]`。首次构建需要下载镜像、npm 与 Go 依赖并编译 Go。`--wait-timeout 600` 是服务健康等待时间，不是镜像下载和构建的总超时。
 
-若镜像拉取或构建器读取基础镜像信息时超时，转到[本地镜像备用方案](docs/IMAGE_DISTRIBUTION.md)，导入课程提供的完整应用镜像后，用该方案中的 `--no-build --pull never` 启动，再回到本文继续页面与数据库验收。
+若镜像拉取或构建器读取基础镜像信息时超时，按[本地镜像备用方案](docs/IMAGE_DISTRIBUTION.md)校验并导入完整镜像包，再在项目根目录执行：
+
+```bash
+docker compose config --images
+docker compose up --no-build --pull never -d --wait --wait-timeout 600
+docker compose ps
+```
+
+当前文档中的镜像包为 `campus-message-board-images-linux-amd64.tar`，配套 `SHA256SUMS`，不包含在 Git 仓库内；仅适用于 `linux/amd64`。`linux/arm64` 使用主流程或对应架构的镜像包。备用包需包含后端、前端的完整应用镜像及 MySQL；只导入 Go / Node 基础镜像仍可能需要联网构建。后续沿用备用方案时，启动也保留 `--no-build --pull never`。
 
 `db` 首次使用空数据卷时自动创建 `campus_message_board` 数据库和 `campus_app` 账号；后端连接成功后执行 `schema.sql`，创建缺失的 `messages` 表。后端等待数据库查询就绪，前端等待后端接口就绪，避免只按进程启动顺序判断可用。
 
@@ -122,7 +140,7 @@ FROM messages ORDER BY id DESC LIMIT 10;
 ## 项目结构与请求链
 
 ```text
-campus-message-board/
+Full-stack-development-class/
 ├── compose.yaml                         三个容器、网络、挂载与启动依赖
 ├── .env.example                         本机密码配置模板
 ├── frontend/
@@ -147,7 +165,7 @@ campus-message-board/
 │       ├── repository/message_repository.go  参数化 SQL
 │       └── model/message.go            数据与响应结构
 ├── scripts/verify-api.mjs               真实接口检查
-└── docs/                               环境、调用链与验证记录
+└── docs/                               环境准备、开发、镜像备用方案与调用链
 ```
 
 ```text
@@ -181,7 +199,7 @@ docker compose up -d --wait --wait-timeout 600
 
 ```
 
-源码通过 bind mount 映射到容器，`node_modules` 与 Go 缓存分别放在命名卷中。新增或更新前端依赖后执行 `docker compose exec frontend npm ci`，再重启前端；更改 Dockerfile 后重新 `up --build`。若使用本地镜像备用方案，镜像与依赖升级需使用匹配批次的文件并核对已有依赖卷。
+源码通过 bind mount 映射到容器，`node_modules` 与 Go 缓存分别放在命名卷中。新增或更新前端依赖后执行 `docker compose exec frontend npm ci`，再执行 `docker compose restart frontend`；更改 Dockerfile 后重新 `up --build`。若使用本地镜像备用方案，镜像与依赖升级需使用匹配批次的文件并核对已有依赖卷；导入新镜像不会自动替换非空依赖卷。
 
 MySQL 的初始库、账号和密码只在空数据卷首次初始化时应用。已有数据卷时修改 `.env` 不会更改数据库内的账号密码；使用原配置启动，或由了解现有配置的人执行账号变更。常规停机使用 `down`，不加 `--volumes`，不通过删除数据卷解决密码问题。已有原生 MySQL 数据不会自动迁入新卷。
 
@@ -227,16 +245,16 @@ docker compose exec frontend node /workspace/scripts/verify-api.mjs
 
 ```
 
-Go 单元测试不连接数据库。接口脚本请求前端容器的 5173，覆盖开发转发，每次新增并保留 3 条检查记录，不删除已有数据。发布、刷新、SQL 查询及 `down` 后重新启动共同确认完整链路与数据保存。
+Go 单元测试不连接数据库。接口脚本请求前端容器的 5173，覆盖开发转发，每次新增并保留 3 条检查记录，不删除已有数据。脚本不会使用模拟数据库，运行前确认连接的是本次项目库。
+
+验收时对照页面、POST 响应和 MySQL 查询中的同一条记录，记下 id、昵称、内容、时间与总数；普通 `down` 后重新启动，再查询并刷新页面核对。完整步骤见[页面、SQL 与持久化验收](docs/DEVELOPMENT_DOCKER.md#5-页面sql-与持久化验收)。这些是验收方法，不能仅凭配置文件或健康检查替代实际验收。
 
 ## 常见问题与更多文档
 
 - [Docker Desktop 共用指南：配置、启动、排错](docs/DEVELOPMENT_DOCKER.md)
 - [镜像拉取超时：本地镜像备用方案](docs/IMAGE_DISTRIBUTION.md)
-- [Windows / WSL 课前准备](docs/PREPARATION.md)
-- [Mac / Docker Desktop 课前准备](docs/PREPARATION_MACOS.md)
+- [Windows / WSL 环境准备](docs/PREPARATION.md)
+- [Mac / Docker Desktop 环境准备](docs/PREPARATION_MACOS.md)
 - [工程分层与完整调用链](docs/TEACHING.md)
-- [UI 复用与素材来源](docs/UI_REUSE.md)
-- [验证记录与尚待实机验收项](docs/VERIFICATION.md)
 
 本机密码、依赖目录、构建产物与日志由 `.gitignore` 排除，MySQL 文件由 Docker 卷管理。
