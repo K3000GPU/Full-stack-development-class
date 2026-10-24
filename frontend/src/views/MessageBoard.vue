@@ -12,18 +12,23 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const messageForm = ref(null)
 const listError = ref('')
+let listRequestId = 0
 
 // 页面层：管理列表、请求状态，协调子组件与接口层。
 async function loadMessages() {
+  const requestId = ++listRequestId
   loading.value = true
   listError.value = ''
   try {
-    messages.value = await listMessages()
+    const result = await listMessages()
+    // 只让最新一次读取更新页面，避免较慢的旧响应覆盖发布后的列表。
+    if (requestId === listRequestId) messages.value = result
   } catch (error) {
+    if (requestId !== listRequestId) return
     listError.value = `读取留言失败：${error.message}`
     throw error
   } finally {
-    loading.value = false
+    if (requestId === listRequestId) loading.value = false
   }
 }
 
