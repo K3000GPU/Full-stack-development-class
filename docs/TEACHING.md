@@ -4,17 +4,19 @@
 
 ## 课前准备
 
-统一 Docker Desktop：Windows 使用 WSL 2 Ubuntu-24.04，通过 WSL Integration 连接 Desktop；Mac 直接使用本机 Terminal。按 [Windows 指南](PREPARATION.md) 或 [Mac 指南](PREPARATION_MACOS.md) 准备，再执行 [共用指南](DEVELOPMENT_DOCKER.md)。
+统一 Docker Desktop：Windows 使用 WSL 2 Ubuntu 26.04.1 LTS（发行版名称 `Ubuntu`），通过 WSL Integration 连接 Desktop；Mac 直接使用本机 Terminal。按 [Windows 指南](PREPARATION.md) 或 [Mac 指南](PREPARATION_MACOS.md) 准备，再执行 [共用指南](DEVELOPMENT_DOCKER.md)。
 
-Windows 在 WSL Ubuntu 的 ~/projects、Mac 在本机 ~/projects 克隆项目并配置自己的 .env，执行 `docker compose up --build -d --wait --wait-timeout 600`。Node.js、Go、MySQL 随容器提供，数据库和账号在空卷首次启动时创建，messages 表由后端创建。安装、下载和首次构建在课前完成。
+Windows 在 WSL Ubuntu 的 ~/projects、Mac 在本机 ~/projects 克隆项目并配置自己的 .env，按[共用指南](DEVELOPMENT_DOCKER.md)执行 `docker compose up --build -d --wait --wait-timeout 600`。Node.js、Go、MySQL 随容器提供，数据库和账号在空卷首次启动时创建，messages 表由后端创建。安装、镜像下载、首次构建与验收在课前完成。镜像拉取超时时才切换到[本地镜像备用方案](IMAGE_DISTRIBUTION.md)，导入课程提供的完整镜像后继续验收。
 
 准备完成的标准：三个服务 healthy，宿主机浏览器能发布并刷新读取，使用 `docker compose exec db mysql -u campus_app -p campus_message_board` 查到相同记录，down 后重新启动仍可读取。各自使用自己的数据库，不依赖共享数据库或同一局域网。
 
-Windows 和 Mac 浏览器都使用 localhost:5173。编辑器与 Agent 打开同一份挂载源码，Windows 使用 WSL 工作区，Mac 使用本机工作区。教师提前验收演示工程并准备截图与录像。
+Windows 和 Mac 浏览器都使用 localhost:5173。编辑器与 Agent 打开同一份挂载源码，Windows 使用 WSL 工作区，Mac 使用本机工作区。可对照[验证记录](VERIFICATION.md)中的截图检查自己的运行结果。
 
 ## Docker 中的运行关系
 
-`compose.yaml` 定义 frontend、backend、db 三个服务；Dockerfile.dev 准备工具、依赖与启动命令。前端发布本机回环地址的 5173，Vite 把 /api 代理到 backend:8080，后端访问 db:3306。后端 8080 仅映射本机回环地址，MySQL 不发布端口。
+`compose.yaml` 定义 frontend、backend、db 三个服务；Dockerfile.dev 准备工具、依赖与启动命令。前端发布本机回环地址的 5173，Vite 把 /api 转发到 backend:8080，后端访问 db:3306。后端 8080 仅映射本机回环地址，MySQL 不发布端口。
+
+`db` 是 **database（数据库）** 的缩写，这里用作 MySQL 的 Compose 服务名。`DB_HOST: db` 表示后端通过这个服务名寻找 MySQL；`DB_NAME: campus_message_board` 则指定连接后使用的数据库。
 
 容器内监听 0.0.0.0，服务间用 Compose 服务名访问，每个容器的 localhost 都代表自己。Handler、Service、Repository 是一个后端程序的三个代码职责，并不是三个容器。
 
@@ -32,7 +34,7 @@ Windows 和 Mac 浏览器都使用 localhost:5173。编辑器与 Agent 打开同
 | `frontend/src/api/http.js` | 发送 HTTP 并统一处理错误 |
 | `compose.yaml`、`.env.example` | 服务组合、网络、数据卷与配置模板 |
 | `frontend/Dockerfile.dev`、`backend/Dockerfile.dev` | 容器中的工具、依赖与启动命令 |
-| `frontend/vite.config.js` | 5173 端口及 /api 代理 |
+| `frontend/vite.config.js` | 5173 端口及 /api 转发 |
 | `backend/main.go` | 启动、连接具体模块、注册路由 |
 | `backend/internal/config/config.go` | 读取环境变量并构造数据库连接参数 |
 | `backend/internal/handler/message_handler.go` | HTTP 请求解析、业务调用和响应 |
@@ -74,7 +76,7 @@ router.POST("/api/messages", messageHandler.Create)
 | 1 | [MessageForm.vue](../frontend/src/components/MessageForm.vue) 第 16 行 `handleSubmit()` | 检查输入，发出 `submit` 事件 | Vue 组件事件，浏览器内部 |
 | 2 | [MessageBoard.vue](../frontend/src/views/MessageBoard.vue) 第 30 行 `publishMessage(payload)` | 设置提交状态，调用 createMessage | JavaScript 内部调用 |
 | 3 | [messages.js](../frontend/src/api/messages.js) 第 8 行 `createMessage(message)` → [http.js](../frontend/src/api/http.js) 第 2 行 `request()` | 准备 POST 路径、JSON 和请求头 | JavaScript 内部调用 |
-| 4 | `http.js` 第 6 行 `fetch()` → [vite.config.js](../frontend/vite.config.js) 第 10 行代理 | 浏览器发往 5173，Vite 转发到 8080；路径仍为 /api/messages | **HTTP POST 与 HTTP 转发** |
+| 4 | `http.js` 第 6 行 `fetch()` → [vite.config.js](../frontend/vite.config.js) 第 10 行转发 | 浏览器发往 5173，Vite 转发到 8080；路径仍为 /api/messages | **HTTP POST 与 HTTP 转发** |
 | 5 | [main.go](../backend/main.go) 第 72 行 `router.POST()` | 根据方法和路径，调用 MessageHandler.Create | HTTP 路由分发 |
 | 6 | [message_handler.go](../backend/internal/handler/message_handler.go) 第 40 行 `Create()` | ShouldBindJSON 解析为 CreateMessageRequest，调用 Service | Go 内部调用 |
 | 7 | [message_service.go](../backend/internal/service/message_service.go) 第 31 行 `Create()`、第 39 行 `validateInput()` | 昵称去首尾空白；按 Unicode 字符数检查长度；拒绝空白内容，再调用 Repository | Go 内部调用 |
@@ -99,7 +101,7 @@ POST 内部为取得新记录而执行的 SELECT，属于该 POST 的后端过�
                             │
                HTTP POST 或 GET /api/messages
                             ↓
-Vite :5173 ── HTTP 代理，保留路径 ──→ Go/Gin :8080
+Vite :5173 ── HTTP 转发，保留路径 ──→ Go/Gin :8080
                                         Handler → Service → Repository
                                              Go 内部方法调用
                                                                │
@@ -124,7 +126,9 @@ Repository 中重点看两条 SQL：
 
 ```sql
 SELECT id, nickname, content, created_at FROM messages ORDER BY id DESC;
+
 INSERT INTO messages (nickname, content) VALUES (?, ?);
+
 ```
 
 `?` 表示参数占位符。昵称中的单引号是普通数据，不拼接成 SQL。新增后按 `WHERE id = ?` 回读数据库生成的时间。

@@ -8,7 +8,7 @@
 
 | 电脑系统 | 开发方式 | 准备文档 |
 | --- | --- | --- |
-| Windows | Docker Desktop + WSL 2 Ubuntu-24.04，启用 WSL Integration | [Windows 课前准备](docs/PREPARATION.md) |
+| Windows | Docker Desktop + WSL 2 Ubuntu 26.04.1 LTS（发行版名称 `Ubuntu`），启用 WSL Integration | [Windows 课前准备](docs/PREPARATION.md) |
 | macOS | Docker Desktop，直接使用 Mac Terminal 与本机源码 | [Mac 课前准备](docs/PREPARATION_MACOS.md) |
 
 Windows 在 WSL Ubuntu 的 `~/projects` 保存源码并执行命令；Mac 直接使用本机的 `~/projects` 与 Terminal。编辑器与 Agent 打开容器实际挂载的同一份源码。两种平台的 Docker 命令均不加 sudo，浏览器统一访问 localhost。
@@ -19,50 +19,76 @@ Windows 在 WSL Ubuntu 的 `~/projects` 保存源码并执行命令；Mac 直接
 | `backend` | `golang:1.27.3-bookworm`；Gin 1.12.0 / MySQL 驱动 1.10.1 | HTTP API，8080 端口映射到本机回环地址 |
 | `db` | `mysql:8.4.11` | 数据库存储；3306 仅供容器网络访问 |
 
+`db` 是 **database（数据库）** 的缩写，在本项目中是 `compose.yaml` 为 MySQL 定义的服务名。后端通过这个服务名找到 MySQL，因此配置为 `DB_HOST: db`；实际存放留言的数据库名则是 `campus_message_board`。
+
 镜像固定版本标签，使用支持 amd64 / arm64 的官方镜像；Compose 不强制 CPU 架构。前端依赖解析由 `package-lock.json` 固定；后端 `go.mod` 声明模块版本，`go.sum` 校验下载内容。镜像版本为本次容器配置目标，实际验证范围见[验证记录](docs/VERIFICATION.md)。
 
 ## 快速启动
 
-先按对应平台指南安装并启动 Docker Desktop。以下命令在 **Windows 的 WSL Ubuntu 终端**或 **Mac Terminal** 执行，Bash / zsh 均可，首次构建需要联网。
+先按对应平台指南安装并启动 Docker Desktop。以下命令在 **Windows 的 WSL Ubuntu 终端**或 **Mac Terminal** 执行，Bash / zsh 均可；默认通过 Compose 下载所需镜像、构建并启动。镜像拉取超时时，再使用课程提供的本地镜像备用方案。
 
 ### 1. 获取代码
 
-仓库地址以实际发布地址为准：
+课程仓库：[Yhimhas/Full-stack-development-class](https://github.com/Yhimhas/Full-stack-development-class)。仓库根目录即留言板项目，克隆时保留默认目录名 `Full-stack-development-class`：
 
 ```bash
 mkdir -p ~/projects
+
 cd ~/projects
-printf '项目 Git 地址：'
-IFS= read -r repo_url
-git clone "$repo_url" campus-message-board
-cd campus-message-board
+
+git clone https://github.com/Yhimhas/Full-stack-development-class.git
+
+cd Full-stack-development-class
+
 ```
 
 已有项目时进入已有目录；开课前确认代码版本与课程通知一致。
 
 ### 2. 配置本机密码
 
+> [!WARNING]
+> **`.env` 是隐私配置文件，包含数据库密码。**
+> 不要将 `.env` 提交到 Git 或推送到 GitHub，也不要把文件、内容或含密码的截图发给 Agent 或他人。
+> `.gitignore` 已配置忽略 `.env`，请保留该忽略规则。
+
 ```bash
-if [ ! -f .env ]; then
-  cp .env.example .env
-fi
+cp -n .env.example .env
+
 chmod 600 .env
+
 nano .env
+
 ```
 
-为 `MYSQL_ROOT_PASSWORD`、`DB_PASSWORD` 分别填写两个不同的密码，保留外层单引号。示例：`DB_PASSWORD='自行设置的项目密码'`。保存方式：`Ctrl+O`、回车、`Ctrl+X`。密码不含单引号和换行；可使用至少 16 位字母数字组合。
+`cp -n` 表示已有 `.env` 时跳过复制，保留其中的配置和密码；不存在时从模板创建。
+
+为 `MYSQL_ROOT_PASSWORD`、`DB_PASSWORD` 自行设置密码，可以相同，但都不能为空，保留外层单引号。示例：`DB_PASSWORD='自行设置的项目密码'`。保存方式：`Ctrl+O`、回车、`Ctrl+X`。密码不含单引号和换行；可使用至少 16 位字母数字组合。
+
+| 密码 | 对应 MySQL 账号 | 使用场景 |
+| --- | --- | --- |
+| `MYSQL_ROOT_PASSWORD`（管理密码） | `root` 管理员 | 数据库、账号和权限管理；仅传给 `db` 容器 |
+| `DB_PASSWORD`（项目密码） | `campus_app` 应用账号 | 后端连接项目库，执行建表、查询和新增留言；课堂用 `mysql -u campus_app -p` 查询时也输入这个密码 |
+
+Compose 用 `DB_PASSWORD` 同时配置数据库容器的 `MYSQL_PASSWORD` 和后端的 `DB_PASSWORD`，使应用账号与后端使用同一个密码。Ubuntu 登录或 `sudo` 的 Linux 用户密码与这两项分别配置。已有数据卷时，修改 `.env` 不会自动修改数据库账号密码；详细说明见[密码配置指南](docs/DEVELOPMENT_DOCKER.md#3-配置本机密码)。
 
 `.env` 由 Compose 读取，并通过 `environment` 将必要参数传给容器；Go 程序只读取进程环境变量。根密码仅传给 `db`，项目密码传给 `db` 与 `backend`，前端不接收数据库密码。`.env` 已被 Git 忽略。
 
 ### 3. 构建并启动
 
+在项目根目录执行：
+
 ```bash
 docker compose config --quiet
+
 docker compose up --build -d --wait --wait-timeout 600
+
 docker compose ps
+
 ```
 
-三个服务应为 `healthy`；打开下面的接口地址会看到 JSON 数组，空库为 `[]`。首次构建需下载镜像、npm 和 Go 依赖，首次 Go 编译也需要时间；在课前完成。
+三个服务应为 `healthy`；打开下面的接口地址会看到 JSON 数组，空库为 `[]`。首次构建需要下载镜像、npm 与 Go 依赖并编译 Go，请在课前完成。
+
+若镜像拉取或构建器读取基础镜像信息时超时，转到[本地镜像备用方案](docs/IMAGE_DISTRIBUTION.md)，导入课程提供的完整应用镜像后，用该方案中的 `--no-build --pull never` 启动，再回到本文继续页面与数据库验收。
 
 `db` 首次使用空数据卷时自动创建 `campus_message_board` 数据库和 `campus_app` 账号；后端连接成功后执行 `schema.sql`，创建缺失的 `messages` 表。后端等待数据库查询就绪，前端等待后端接口就绪，避免只按进程启动顺序判断可用。
 
@@ -78,14 +104,17 @@ Windows 和 Mac 浏览器均访问 [http://localhost:5173](http://localhost:5173
 
 ```bash
 docker compose exec db mysql -u campus_app -p campus_message_board
+
 ```
 
 在 MySQL 提示符执行：
 
 ```sql
 SHOW TABLES;
+
 SELECT id, nickname, content, created_at
 FROM messages ORDER BY id DESC LIMIT 10;
+
 ```
 
 输入 `exit` 退出客户端；数据库服务继续运行。数据库数据保存在命名卷 `mysql_data` 中，Git 不复制已有留言。
@@ -99,7 +128,7 @@ campus-message-board/
 ├── frontend/
 │   ├── Dockerfile.dev                   前端开发镜像与 npm 依赖
 │   ├── package.json / package-lock.json  前端命令与依赖
-│   ├── vite.config.js                   开发监听地址及 /api 代理
+│   ├── vite.config.js                   开发监听地址及 /api 转发
 │   └── src/
 │       ├── views/MessageBoard.vue       页面状态、发布后刷新
 │       ├── components/MessageForm.vue   输入与提交事件
@@ -124,12 +153,12 @@ campus-message-board/
 ```text
 宿主机浏览器
   → localhost:5173 → Docker Desktop 转发 → frontend 容器中的 Vite
-  → HTTP /api 代理到 backend:8080
+  → HTTP /api 转发到 backend:8080
   → Handler → Service → Repository（同一个 Go 程序内部调用）
   → MySQL 协议访问 db:3306 → 数据卷
 ```
 
-浏览器中的 Vue 页面与组件负责交互；Node.js 容器提供前端开发服务。`backend`、`db` 是容器网络中的服务名，分别用于代理与数据库连接。每个容器的 `127.0.0.1` 指向自身；前端容器不能用它访问后端，后端也不能用它访问 MySQL。
+浏览器中的 Vue 页面与组件负责交互；Node.js 容器提供前端开发服务。`backend`、`db` 是容器网络中的服务名，分别用于转发与数据库连接。每个容器的 `127.0.0.1` 指向自身；前端容器不能用它访问后端，后端也不能用它访问 MySQL。
 
 Handler、Service、Repository 是代码分层，共同运行在一个后端容器内。Docker 管理运行环境，分层组织程序职责；两者不是同一个概念。
 
@@ -138,6 +167,7 @@ Handler、Service、Repository 是代码分层，共同运行在一个后端容�
 ```bash
 # 查看状态与日志；日志跟随后按 Ctrl+C 只结束查看。
 docker compose ps
+
 docker compose logs -f --tail=50 backend
 
 # Go 源码修改后重新启动后端；Vue 修改由 Vite 热更新。
@@ -148,9 +178,10 @@ docker compose down
 
 # 下次启动。
 docker compose up -d --wait --wait-timeout 600
+
 ```
 
-源码通过 bind mount 映射到容器，`node_modules` 与 Go 缓存分别放在命名卷中。新增或更新前端依赖后执行 `docker compose exec frontend npm ci`，再重启前端；更改 Dockerfile 后重新 `up --build`。
+源码通过 bind mount 映射到容器，`node_modules` 与 Go 缓存分别放在命名卷中。新增或更新前端依赖后执行 `docker compose exec frontend npm ci`，再重启前端；更改 Dockerfile 后重新 `up --build`。若使用本地镜像备用方案，镜像与依赖升级需使用匹配批次的文件并核对已有依赖卷。
 
 MySQL 的初始库、账号和密码只在空数据卷首次初始化时应用。已有数据卷时修改 `.env` 不会更改数据库内的账号密码；使用原配置启动，或由了解现有配置的人执行账号变更。常规停机使用 `down`，不加 `--volumes`，不通过删除数据卷解决密码问题。已有原生 MySQL 数据不会自动迁入新卷。
 
@@ -185,17 +216,23 @@ POST 使用 `Content-Type: application/json`：
 
 ```bash
 docker compose exec backend go mod verify
+
 docker compose exec backend go test ./...
+
 docker compose exec backend go build -o /tmp/campus-message-board .
+
 docker compose exec frontend npm run build
+
 docker compose exec frontend node /workspace/scripts/verify-api.mjs
+
 ```
 
-Go 单元测试不连接数据库。接口脚本请求前端容器的 5173，覆盖开发代理，每次新增并保留 3 条检查记录，不删除已有数据。发布、刷新、SQL 查询及 `down` 后重新启动共同确认完整链路与数据保存。
+Go 单元测试不连接数据库。接口脚本请求前端容器的 5173，覆盖开发转发，每次新增并保留 3 条检查记录，不删除已有数据。发布、刷新、SQL 查询及 `down` 后重新启动共同确认完整链路与数据保存。
 
 ## 常见问题与更多文档
 
 - [Docker Desktop 共用指南：配置、启动、排错](docs/DEVELOPMENT_DOCKER.md)
+- [镜像拉取超时：本地镜像备用方案](docs/IMAGE_DISTRIBUTION.md)
 - [Windows / WSL 课前准备](docs/PREPARATION.md)
 - [Mac / Docker Desktop 课前准备](docs/PREPARATION_MACOS.md)
 - [工程分层与完整调用链](docs/TEACHING.md)
